@@ -1,0 +1,457 @@
+#! /bin/bash -e
+
+# Script for testing one or more pull requests against a reference release and an intermediate development release
+#
+# Usage:
+#   validate [PR ...]
+#
+# Note: this script relies on `visDQMUpload` and `visDQMUtils.py` being available in the same directory.
+# If they are missing they are automatically downloaded from https://github.com/rovere/dqmgui/ .
+
+BASE=$(mktemp -d -p $PWD)
+REPORT=$BASE/report.md
+
+# repository with the working branch and pull requests
+REPOSITORY=cms-patatrack
+
+# working branch, merged on top of the original CMSSW (pre)release
+BRANCH=CMSSW_10_1_X_Patatrack
+
+# matrix workflows, default global tag and number of events
+REFERENCE_WORKFLOW="10824.5"
+WORKFLOWS="10824.5 10824.8 10824.7"
+GLOBALTAG="101X_upgrade2018_realistic_v3"
+NUMEVENTS=100
+
+# datasets used as input for the matrix-like tests
+SAMPLES="TTBAR ZMUMU"
+TTBAR="/RelValTTbar_13/CMSSW_10_1_0_pre3-PU25ns_101X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW"
+TTBAR_NUMEVENTS=100
+ZMUMU="/RelValZMM_13/CMSSW_10_1_0_pre3-101X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW"
+ZMUMU_NUMEVENTS=200
+
+# optionally, local cache of the input files
+TTBAR_CACHE_PATH="file:/data/store/relval/CMSSW_10_1_0_pre3/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_101X_upgrade2018_realistic_v3-v1/10000"
+TTBAR_CACHE_FILE="3053FE8D-5F29-E811-A9D7-0CC47A7C35B2.root,EC45AE6F-6029-E811-9E65-0CC47A7C34B0.root"
+ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_1_0_pre3/RelValZMM_13/GEN-SIM-DIGI-RAW/101X_upgrade2018_realistic_v3-v1/10000"
+ZMUMU_CACHE_FILE="96A861D5-E528-E811-867D-0025905A609A.root,A82CB090-E628-E811-9DE0-0CC47A78A2F6.root"
+
+# DQM files produced by step4
+DQMFILE="DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root"
+
+# URL and local area for uploading validation plots
+PLOTS_URL="https://fwyzard.web.cern.ch/fwyzard/patatrack/pulls"
+PLOTS_DIR="/eos/user/f/fwyzard/www/patatrack/pulls"
+
+# URL of the DQM GUI used to upload files
+UPLOAD_URL="http://dqmgui7.cern.ch:8060/dqm/dev"
+
+# full path to visDQMUpload
+UPLOAD=$(dirname $(readlink -f ${BASH_SOURCE[0]}))/visDQMUpload
+if ! [ -x $UPLOAD ]; then
+  wget -q "https://raw.githubusercontent.com/rovere/dqmgui/index128/bin/visDQMUpload" -O $UPLOAD
+  wget -q "https://raw.githubusercontent.com/rovere/dqmgui/index128/src/python/DQM/visDQMUtils.py" -O $(dirname $UPLOAD)/visDQMUtils.py
+  chmod +x $UPLOAD
+fi
+
+# use locally installed releases
+source /data/cmssw/cmsset_default.sh
+
+
+function report() {
+  echo "$@" >> $REPORT
+}
+
+function apply() {
+  PATTERN="$1"; shift
+    for ARG; do echo $PATTERN | sed -e"s/%/$ARG/g"; done
+}
+
+function apply_and_glob() {
+  echo $(apply "$@")
+}
+
+function setup_release() {
+  local DIRNAME="$1"
+  local RELEASE="$2"
+  # set up the reference area
+  cd $BASE
+  scram project -n $DIRNAME CMSSW $RELEASE
+  cd $DIRNAME/src
+  eval $(scram runtime -sh)
+  git cms-init --upstream-only
+  git rev-parse --short=12 HEAD > .hash
+  echo
+  # <add here any required pull request or external update>
+  git cms-addpkg HeterogeneousCore
+  scram b -j`nproc`
+  echo
+}
+
+function setup_development_release() {
+  local DIRNAME="$1"
+  local RELEASE="$2"
+  setup_release $DIRNAME $RELEASE
+  # <add here any required pull request or external update>
+  git cms-remote add $REPOSITORY
+  git checkout $REPOSITORY/$BRANCH -b $BRANCH
+  git rev-parse --short=12 HEAD > .hash
+  git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u)
+  git cms-checkdeps -a
+  scram b -j`nproc`
+  echo
+}
+
+function setup_patatrack_release() {
+  local DIRNAME="$1"
+  local RELEASE="$2"
+  # set up the reference area
+  cd "$BASE"
+  scram project -n $DIRNAME CMSSW $RELEASE
+  cd $DIRNAME/src
+  eval $(scram runtime -sh)
+  cp -ar $CMSSW_RELEASE_BASE/git .git
+  git checkout -- .clang-tidy .gitignore
+  git rev-parse --short=12 HEAD > .hash
+  echo
+  # <add here any required pull request or external update>
+  git cms-addpkg HeterogeneousCore
+  scram b -j`nproc`
+  echo
+}
+
+function clone_release() {
+  local SOURCE="$1"
+  local TARGET="$2"
+  cd "$BASE"
+  cp -ar "$SOURCE" "$TARGET"
+  cd "$TARGET"/src
+  scram b ProjectRename
+  eval $(scram runtime -sh)
+  echo
+}
+
+function build_matrix() {
+  local DIRNAME="$1"
+  shift
+  local WORKFLOWS="$@"
+  local SAMPLE DATASET WORKDIR CACHE_PATH CACHE_FILE INPUT MY_GLOBALTAG MY_NUMEVENTS WORKFLOW STEP3 STEP4
+  # create the matrix-like workflows for the various samples
+  cd $BASE/$DIRNAME
+  eval $(scram runtime -sh)
+  for SAMPLE in $SAMPLES; do
+    DATASET=${!SAMPLE}
+    WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
+    CACHE_PATH=$(eval echo \$$(echo $SAMPLE)_CACHE_PATH)
+    CACHE_FILE=$(eval echo \$$(echo $SAMPLE)_CACHE_FILE)
+    if [ "$CACHE_PATH" ] && [ "$CACHE_FILE" ]; then
+      INPUT="--dirin=$CACHE_PATH --filein $CACHE_FILE"
+    else
+      INPUT="--dasquery 'file dataset=$DATASET'"
+    fi
+    # customise the global tag and number of events by dataset, or use the default values
+    MY_GLOBALTAG=$(eval echo \$$(echo $SAMPLE)_GLOBALTAG)
+    MY_NUMEVENTS=$(eval echo \$$(echo $SAMPLE)_NUMEVENTS)
+    echo "# run on ${MY_NUMEVENTS:=$NUMEVENTS} events on $DATASET with ${MY_GLOBALTAG:=$GLOBALTAG} conditions"
+    mkdir -p $CMSSW_BASE/run/$WORKDIR
+    cd $CMSSW_BASE/run/$WORKDIR
+    for WORKFLOW in $WORKFLOWS; do
+      # check the the workflow actually exists in the release
+      runTheMatrix.py -n -e -l $WORKFLOW | grep -q ^$WORKFLOW || continue
+      mkdir -p $WORKFLOW
+      cd $WORKFLOW
+      # extract step3 and step4 commands
+      STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
+      STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/")"
+      echo "# workflow $WORKFLOW"
+      $STEP3 $INPUT --no_exec --python_filename=step3.py
+      $STEP4        --no_exec --python_filename=step4.py
+      cd ..
+    done
+    echo
+  done
+}
+
+function run_workflows() {
+  local WORKDIR
+  cd $BASE
+  for WORKDIR in $(apply_and_glob "%/run/*/*/" "$@"); do
+    cd $BASE/$WORKDIR
+    echo $WORKDIR
+    if [ -f $DQMFILE ]; then
+      echo "Skipping"
+      continue
+    fi
+    eval $(scram runtime -sh)
+    echo -n "Running step3... "
+    if cmsRun step3.py >& step3.log; then
+      echo "done"
+    else
+      echo "failed"
+      tail step3.log
+      # do not attempt to run step4 is step3 failed
+      continue
+    fi
+    echo -n "Running step4... "
+    if cmsRun step4.py >& step4.log; then
+      echo "done"
+    else
+      echo "failed"
+      tail step4.log
+    fi
+  done
+  cd $BASE
+}
+
+# Make validation plots, based on the DQM output of step4 and makeTrackValidationPlots.py
+# and upload them to the EOS www area.
+#
+# usage:
+#   make_valdation_plots REFERENCE_RELEASE [[RELEASE ...] TARGET_RELEASE]
+#
+function make_valdation_plots() {
+  [ "$1" ] || return 1
+  local DIRNAME="${!#}"
+  local REFERENCE_RELEASE="$1"
+  local -a RELEASES=("$@")
+  shift
+  local -a TESTING_RELEASES=($@)
+  local HASH=$(cat $(apply_and_glob "%/src/.hash" ${RELEASES[@]}) | sha1sum | cut -d' ' -f1)
+  cd $BASE/$DIRNAME
+  eval $(scram runtime -sh)
+
+  local SAMPLE
+  for SAMPLE in $SAMPLES; do
+    local DATASET=${!SAMPLE}
+    report "### $DATASET"
+    local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
+    rm -rf $BASE/plots/$WORKDIR
+    mkdir -p $BASE/plots/$WORKDIR
+    cd $BASE/plots/$WORKDIR
+
+    # reference release and workflow
+    local FILE=$BASE/$REFERENCE_RELEASE/run/$WORKDIR/$REFERENCE_WORKFLOW/$DQMFILE
+    [ -f $FILE ] && ln -s $FILE ${REFERENCE_RELEASE}-${REFERENCE_WORKFLOW}.root
+
+    # development releases and workflows
+    local RELEASE
+    for RELEASE in ${TESTING_RELEASES[@]}; do
+      local WORKFLOW
+      for WORKFLOW in $WORKFLOWS; do
+        local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$DQMFILE
+        [ -f $FILE ] && ln -s $FILE ${RELEASE}-${WORKFLOW}.root
+      done
+    done
+
+    # validation of all workflows across all releases
+    rm -rf $PLOTS_DIR/$HASH/$WORKDIR
+    local WORKFLOW
+    for WORKFLOW in $WORKFLOWS; do
+      mkdir -p $PLOTS_DIR/$HASH/$WORKDIR/$WORKFLOW
+      if [ "$WORKFLOW" == "$REFERENCE_WORKFLOW" ]; then
+        # reference workflow
+        makeTrackValidationPlots.py \
+          --html-sample $DATASET \
+          --html-validation-name $DATASET \
+          --outputDir $PLOTS_DIR/$HASH/$WORKDIR/$REFERENCE_WORKFLOW \
+          ${RELEASES[@]/%/-${REFERENCE_WORKFLOW}.root}
+        true
+      else
+        # other workflows
+        [ "${TESTING_RELEASES[0]}" ] || continue
+        makeTrackValidationPlots.py \
+          --html-sample $DATASET \
+          --html-validation-name $DATASET \
+          --outputDir $PLOTS_DIR/$HASH/$WORKDIR/$WORKFLOW \
+          ${TESTING_RELEASES[0]}-${REFERENCE_WORKFLOW}.root \
+          ${TESTING_RELEASES[@]/%/-${WORKFLOW}.root}
+      fi
+      report "  - [tracking validation plots]($PLOTS_URL/$HASH/$WORKDIR/$WORKFLOW/index.html) for workflow $WORKFLOW"
+    done
+    report
+  done
+}
+
+# Build a link to the DQM GUI showing one or more test results
+#
+# usage:
+#   build_dqm_link REFERENCE_DATASET [DATASET ...]
+#
+function build_dqm_link() {
+  local URL="$UPLOAD_URL/start?runnr=1;"
+  URL+="dataset=$1;"
+  URL+="sampletype=offline_relval;"
+  URL+="filter=all;"
+  URL+="referencepos=overlay;"
+  URL+="referenceshow=all;"
+  URL+="referencenorm=True;"
+  if [ "$2" ]; then
+    URL+="referenceobj1=other%3A%3A$2%3A;"
+  else
+    URL+="referenceobj1=none;"
+  fi
+  if [ "$3" ]; then
+    URL+="referenceobj2=other%3A%3A$3%3A;"
+  else
+    URL+="referenceobj2=none;"
+  fi
+  if [ "$4" ]; then
+    URL+="referenceobj3=other%3A%3A$4%3A;"
+  else
+    URL+="referenceobj3=none;"
+  fi
+  if [ "$5" ]; then
+    URL+="referenceobj4=other%3A%3A$5%3A;"
+  else
+    URL+="referenceobj4=none;"
+  fi
+  URL+="search=;"
+  URL+="striptype=object;"
+  URL+="stripruns=;"
+  URL+="stripaxis=run;"
+  URL+="stripomit=none;"
+  URL+="workspace=Everything;"
+  URL+="size=M;"
+  URL+="root=Tracking;"
+  URL+="focus=;"
+  URL+="zoom=no;"
+  echo "$URL"
+}
+
+# usage:
+#   build_dqm_dataset RELEASE DATASET WORKFLOW
+function build_dqm_dataset() {
+  local RELEASE="$1"
+  local DATASET="$2"
+  local WORKFLOW="$3"
+  local HASH=$(<$BASE/$RELEASE/src/.hash)
+  echo "$(echo $DATASET | cut -d/ -f-3)-${HASH}/${WORKFLOW/./_}"
+}
+
+
+# usage:
+#   build_dqm_filename RELEASE DATASET WORKFLOW
+function build_dqm_filename() {
+  local RELEASE="$1"
+  local DATASET="$2"
+  local WORKFLOW="$3"
+  local NAME=$(echo $DATASET | cut -d/ -f-3 | sed -e's|/|__|g')
+  local HASH=$(<$BASE/$RELEASE/src/.hash)
+  echo "DQM_V0001_R000000001${NAME}-${HASH}__${WORKFLOW/./_}.root"
+}
+
+
+# Upload DQM plots to the GUI.
+#
+# usage:
+#   upload_dqm_plots REFERENCE_RELEASE [[RELEASE ...] TARGET_RELEASE]
+#
+function upload_dqm_plots() {
+  [ "$1" ] || return 1
+  local REFERENCE_RELEASE="$1"; shift
+  local RELEASES=("$@")
+  local SAMPLE
+  for SAMPLE in $SAMPLES; do
+    local DATASET=${!SAMPLE}
+    report "### $DATASET"
+    local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
+    rm -rf $BASE/dqm/$WORKDIR
+    mkdir -p $BASE/dqm/$WORKDIR
+    cd $BASE/dqm/$WORKDIR
+
+    # reference release and workflow
+    local HASH=$(<$BASE/$REFERENCE_RELEASE/src/.hash)
+    local UPLOAD_FILE=$(build_dqm_filename $REFERENCE_RELEASE $DATASET $REFERENCE_WORKFLOW)
+    local FILE=$BASE/$REFERENCE_RELEASE/run/$WORKDIR/$REFERENCE_WORKFLOW/$DQMFILE
+    if [ -f $FILE ]; then
+      ln -s $FILE $UPLOAD_FILE
+      $UPLOAD $UPLOAD_URL $UPLOAD_FILE
+      report "  - reference [DQM plots]($(build_dqm_link $(build_dqm_dataset $REFERENCE_RELEASE $DATASET $REFERENCE_WORKFLOW))) for $REFERENCE_RELEASE release, workflow $REFERENCE_WORKFLOW"
+    else
+      report "  - reference DQM plots for $REFERENCE_RELEASE release, workflow $REFERENCE_WORKFLOW are **missing**"
+    fi
+
+    # development releases and workflows
+    local RELEASE
+    for RELEASE in ${RELEASES[@]}; do
+      local HASH=$(<$BASE/$RELEASE/src/.hash)
+      local WORKFLOW
+      for WORKFLOW in $WORKFLOWS; do
+        local UPLOAD_FILE=$(build_dqm_filename $RELEASE $DATASET $WORKFLOW)
+        local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$DQMFILE
+        if [ -f $FILE ]; then
+          ln -s $FILE $UPLOAD_FILE
+          $UPLOAD $UPLOAD_URL $UPLOAD_FILE
+          report "  - [DQM plots]($(build_dqm_link $(build_dqm_dataset $RELEASE $DATASET $WORKFLOW))) for $RELEASE release, workflow $WORKFLOW"
+        else
+          report "  - DQM plots for $RELEASE release, workflow $WORKFLOW are **missing**"
+        fi
+      done
+    done
+
+    # DQM-based validation of all workflows across all releases
+    rm -rf $PLOTS_DIR/$HASH/$WORKDIR
+    local WORKFLOW
+    for WORKFLOW in $WORKFLOWS; do
+      mkdir -p $PLOTS_DIR/$HASH/$WORKDIR/$WORKFLOW
+      if [ "$WORKFLOW" == "$REFERENCE_WORKFLOW" ]; then
+        # reference workflow
+        local LINK=$(build_dqm_link \
+          $(for RELEASE in ${REFERENCE_RELEASE} ${RELEASES[@]}; do build_dqm_dataset $RELEASE $DATASET $WORKFLOW; done) \
+        )
+        report "  - [DQM comparison]($LINK) for reference workflow $WORKFLOW"
+      else
+        # other workflows
+        [ "${RELEASES[0]}" ] || continue
+        local LINK=$(build_dqm_link \
+          $(build_dqm_dataset ${RELEASES[0]} $DATASET $REFERENCE_WORKFLOW) \
+          $(for RELEASE in ${RELEASES[@]}; do build_dqm_dataset $RELEASE $DATASET $WORKFLOW; done) \
+        )
+        report "  - [DQM comparison]($LINK) for workflow $WORKFLOW"
+      fi
+    done
+    report
+
+  done
+}
+
+rm -f $REPORT
+touch $REPORT
+
+# set up the reference release
+rm -rf                  "reference"
+setup_release           "reference" CMSSW_10_1_0
+build_matrix            "reference" "$REFERENCE_WORKFLOWS"
+
+# set up the current development branch
+rm -rf                  "development"
+setup_patatrack_release "development" CMSSW_10_1_0_Patatrack
+build_matrix            "development" "$WORKFLOWS"
+
+# set up the development branch plus the PR(s) to be tested
+#rm -rf "testing"
+if [ "$*" ]; then
+  clone_release "development" "testing"
+  for PR in "$@"; do
+    git cms-merge-topic "$REPOSITORY:$PR"
+    git rev-parse --short=12 "$REPOSITORY/refs/pull/$PR/head" > .hash
+  done
+  scram b -j`nproc`
+  build_matrix "testing" "$WORKFLOWS"
+
+  # run the workflows
+  run_workflows "reference" "development" "testing"
+  # make validation plots
+  make_valdation_plots "reference" "development" "testing"
+  # upload DQM plots to the GUI
+  upload_dqm_plots "reference" "development" "testing"
+else
+  # run the workflows
+  run_workflows "reference" "development"
+  # make validation plots
+  make_valdation_plots "reference" "development"
+  # upload DQM plots to the GUI
+  upload_dqm_plots "reference" "development"
+fi
+
+echo "A report can be found at $REPORT ."
