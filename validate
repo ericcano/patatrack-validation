@@ -8,8 +8,12 @@
 # Note: this script relies on `visDQMUpload` and `visDQMUtils.py` being available in the same directory.
 # If they are missing they are automatically downloaded from https://github.com/rovere/dqmgui/ .
 
-BASE=$(mktemp -d -p $PWD)
+BASE=$(mktemp -d -p $PWD run.XXXXXXXXXX)
 REPORT=$BASE/report.md
+
+# save the original file descriptors, then redirect all output and errors to a log file
+exec 3>&1 4>&2
+exec &> $BASE/log
 
 # repository with the working branch and pull requests
 REPOSITORY=cms-patatrack
@@ -49,8 +53,8 @@ UPLOAD_URL="http://dqmgui7.cern.ch:8060/dqm/dev"
 # full path to visDQMUpload
 UPLOAD=$(dirname $(readlink -f ${BASH_SOURCE[0]}))/visDQMUpload
 if ! [ -x $UPLOAD ]; then
-  wget -q "https://raw.githubusercontent.com/rovere/dqmgui/index128/bin/visDQMUpload" -O $UPLOAD
-  wget -q "https://raw.githubusercontent.com/rovere/dqmgui/index128/src/python/DQM/visDQMUtils.py" -O $(dirname $UPLOAD)/visDQMUtils.py
+  DQMGUIREPO="https://raw.githubusercontent.com/rovere/dqmgui/index128"
+  wget -q "$DQMGUIREPO/bin/visDQMUpload" "$DQMGUIREPO/src/python/DQM/visDQMUtils.py" -nd -p $(dirname $UPLOAD)/
   chmod +x $UPLOAD
 fi
 
@@ -454,4 +458,6 @@ else
   upload_dqm_plots "reference" "development"
 fi
 
+# restore the original descriptors
+exec 3>&1 4>&2
 echo "A report can be found at $REPORT ."
