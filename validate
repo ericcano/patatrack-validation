@@ -54,7 +54,7 @@ UPLOAD_URL="http://dqmgui7.cern.ch:8060/dqm/dev"
 UPLOAD=$(dirname $(readlink -f ${BASH_SOURCE[0]}))/visDQMUpload
 if ! [ -x $UPLOAD ]; then
   DQMGUIREPO="https://raw.githubusercontent.com/rovere/dqmgui/index128"
-  wget -q "$DQMGUIREPO/bin/visDQMUpload" "$DQMGUIREPO/src/python/DQM/visDQMUtils.py" -nd -p $(dirname $UPLOAD)/
+  wget -q "$DQMGUIREPO/bin/visDQMUpload" "$DQMGUIREPO/src/python/DQM/visDQMUtils.py" -nd -P $(dirname $UPLOAD)/
   chmod +x $UPLOAD
 fi
 
@@ -84,11 +84,11 @@ function setup_release() {
   cd $DIRNAME/src
   eval $(scram runtime -sh)
   git cms-init --upstream-only
-  git rev-parse --short=12 HEAD > .hash
   echo
   # <add here any required pull request or external update>
   git cms-addpkg HeterogeneousCore
   scram b -j`nproc`
+  git rev-parse --short=12 HEAD > .hash
   echo
 }
 
@@ -99,10 +99,10 @@ function setup_development_release() {
   # <add here any required pull request or external update>
   git cms-remote add $REPOSITORY
   git checkout $REPOSITORY/$BRANCH -b $BRANCH
-  git rev-parse --short=12 HEAD > .hash
   git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u)
   git cms-checkdeps -a
   scram b -j`nproc`
+  git rev-parse --short=12 HEAD > .hash
   echo
 }
 
@@ -116,11 +116,10 @@ function setup_patatrack_release() {
   eval $(scram runtime -sh)
   cp -ar $CMSSW_RELEASE_BASE/git .git
   git checkout -- .clang-tidy .gitignore
-  git rev-parse --short=12 HEAD > .hash
-  echo
+  git pull
   # <add here any required pull request or external update>
-  git cms-addpkg HeterogeneousCore
   scram b -j`nproc`
+  git rev-parse --short=12 HEAD > .hash
   echo
 }
 
@@ -423,18 +422,20 @@ rm -f $REPORT
 touch $REPORT
 
 # set up the reference release
-rm -rf                  "reference"
-setup_release           "reference" CMSSW_10_1_0
-build_matrix            "reference" "$REFERENCE_WORKFLOWS"
+rm -rf "reference"
+setup_release "reference" CMSSW_10_1_0
+build_matrix "reference" "$REFERENCE_WORKFLOW"
+DIRECTORIES="reference"
 
 # set up the current development branch
-rm -rf                  "development"
+rm -rf "development"
 setup_patatrack_release "development" CMSSW_10_1_0_Patatrack
-build_matrix            "development" "$WORKFLOWS"
+build_matrix "development" "$WORKFLOWS"
+DIRECTORIES+=" development"
 
 # set up the development branch plus the PR(s) to be tested
-#rm -rf "testing"
 if [ "$*" ]; then
+  rm -rf "testing"
   clone_release "development" "testing"
   for PR in "$@"; do
     git cms-merge-topic "$REPOSITORY:$PR"
@@ -442,21 +443,14 @@ if [ "$*" ]; then
   done
   scram b -j`nproc`
   build_matrix "testing" "$WORKFLOWS"
-
-  # run the workflows
-  run_workflows "reference" "development" "testing"
-  # make validation plots
-  make_valdation_plots "reference" "development" "testing"
-  # upload DQM plots to the GUI
-  upload_dqm_plots "reference" "development" "testing"
-else
-  # run the workflows
-  run_workflows "reference" "development"
-  # make validation plots
-  make_valdation_plots "reference" "development"
-  # upload DQM plots to the GUI
-  upload_dqm_plots "reference" "development"
+  DIRECTORIES+=" testing"
 fi
+# run the workflows
+run_workflows $DIRECTORIES
+# make validation plots
+make_valdation_plots $DIRECTORIES
+# upload DQM plots to the GUI
+upload_dqm_plots $DIRECTORIES
 
 # restore the original descriptors
 exec 3>&1 4>&2
