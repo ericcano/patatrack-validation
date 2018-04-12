@@ -183,13 +183,14 @@ function build_matrix() {
       $STEP3 $INPUT --no_exec --python_filename=step3.py
       $STEP4        --no_exec --python_filename=step4.py
       # add the NVProfilerService to step3
-      cat >> step3.py << @EOF
-# mark CMSSW transitions and modules in the nvprof profile
-process.NVProfilerService = cms.Service("NVProfilerService",
-    highlightModules = cms.untracked.vstring(),
-    showModulePrefetching = cms.untracked.bool( False )
-)
-@EOF
+      sed -i step3.py -e '/\# End of customisation functions/i \
+# Mark CMSSW transitions and modules in the nvprof profile\
+from FWCore.ParameterSet.Utilities import moduleLabelsInSequences\
+process.NVProfilerService = cms.Service("NVProfilerService",\
+    highlightModules = cms.untracked.vstring( moduleLabelsInSequences(process.reconstruction_step) ),\
+    showModulePrefetching = cms.untracked.bool( False )\
+)\
+'
       cd ..
     done
     echo
