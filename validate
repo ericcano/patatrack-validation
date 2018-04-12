@@ -285,9 +285,9 @@ function build_dqm_link() {
   URL+="dataset=$1;"
   URL+="sampletype=offline_relval;"
   URL+="filter=all;"
-  URL+="referencepos=overlay;"
+  URL+="referencepos=ratiooverlay;"
   URL+="referenceshow=all;"
-  URL+="referencenorm=True;"
+  URL+="referencenorm=False;"
   if [ "$2" ]; then
     URL+="referenceobj1=other%3A%3A$2%3A;"
   else
@@ -314,7 +314,7 @@ function build_dqm_link() {
   URL+="stripaxis=run;"
   URL+="stripomit=none;"
   URL+="workspace=Everything;"
-  URL+="size=M;"
+  URL+="size=L;"
   URL+="root=Tracking;"
   URL+="focus=;"
   URL+="zoom=no;"
