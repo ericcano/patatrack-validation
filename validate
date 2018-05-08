@@ -21,27 +21,24 @@ exec &> $BASE/log
 # repository with the working branch and pull requests
 REPOSITORY=cms-patatrack
 
-# working branch, merged on top of the original CMSSW (pre)release
-BRANCH=CMSSW_10_1_X_Patatrack
-
 # matrix workflows, default global tag and number of events
 REFERENCE_WORKFLOW="10824.5"
 WORKFLOWS="10824.5 10824.8 10824.7"
-GLOBALTAG="101X_upgrade2018_realistic_v6"
+GLOBALTAG="101X_upgrade2018_realistic_v7"
 NUMEVENTS=100
 
 # datasets used as input for the matrix-like tests
 SAMPLES="TTBAR ZMUMU"
-TTBAR="/RelValTTbar_13/CMSSW_10_1_0-PU25ns_101X_upgrade2018_realistic_v6-v1/GEN-SIM-DIGI-RAW"
+TTBAR="/RelValTTbar_13/CMSSW_10_2_0_pre2-PU25ns_101X_upgrade2018_realistic_v7-v1/GEN-SIM-DIGI-RAW"
 TTBAR_NUMEVENTS=100
-ZMUMU="/RelValZMM_13/CMSSW_10_1_0-101X_upgrade2018_realistic_v6_resub-v1/GEN-SIM-DIGI-RAW"
+ZMUMU="/RelValZMM_13/CMSSW_10_2_0_pre2-101X_upgrade2018_realistic_v7-v1/GEN-SIM-DIGI-RAW"
 ZMUMU_NUMEVENTS=200
 
 # optionally, local cache of the input files
-TTBAR_CACHE_PATH="file:/data/store/relval/CMSSW_10_1_0/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_101X_upgrade2018_realistic_v6-v1/10000"
-TTBAR_CACHE_FILE="340D5E67-B338-E811-AD85-0CC47A78A440.root,344C9DAB-B438-E811-A79D-0CC47A78A446.root"
-ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_1_0/RelValZMM_13/GEN-SIM-DIGI-RAW/101X_upgrade2018_realistic_v6_resub-v1/10000"
-ZMUMU_CACHE_FILE="244F657D-CE37-E811-BC9A-0CC47A4D75EC.root,E8053C7C-CE37-E811-8F93-0CC47A7C353E.root"
+TTBAR_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_0_pre2/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_101X_upgrade2018_realistic_v7-v1/20000/"
+TTBAR_CACHE_FILE="E2050B1B-FC4C-E811-A1C0-0CC47A4D75EC.root,C2A66A1C-FC4C-E811-B96D-0CC47A4D767A.root"
+ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_0_pre2/RelValZMM_13/GEN-SIM-DIGI-RAW/101X_upgrade2018_realistic_v7-v1/20000/"
+ZMUMU_CACHE_FILE="A4E6741F-3C4C-E811-9DE4-0025905A612E.root,DA557703-3D4C-E811-B513-0025905A6122.root"
 
 # DQM files produced by step4
 DQMFILE="DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root"
@@ -62,6 +59,7 @@ if ! [ -x $DQMGUI_UPLOAD ]; then
 fi
 
 # use locally installed releases
+export SCRAM_ARCH=slc7_amd64_gcc700
 source /data/cmssw/cmsset_default.sh
 
 
@@ -90,8 +88,8 @@ function setup_release() {
   git cms-init --upstream-only
   echo
   # <add here any required pull request or external update>
-  git cms-addpkg HeterogeneousCore
-  scram b -j`nproc`
+  #git cms-addpkg HeterogeneousCore
+  #scram b -j`nproc`
   git rev-parse --short=12 HEAD > .hash
   echo
 }
@@ -99,11 +97,12 @@ function setup_release() {
 function setup_development_release() {
   local DIRNAME="$1"
   local RELEASE="$2"
+  local BRANCH="$3"
   setup_release $DIRNAME $RELEASE
   # <add here any required pull request or external update>
   git cms-remote add $REPOSITORY
   git checkout $REPOSITORY/$BRANCH -b $BRANCH
-  git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u)
+  git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u) || true
   git cms-checkdeps -a
   scram b -j`nproc`
   git rev-parse --short=12 HEAD > .hash
@@ -117,6 +116,7 @@ function setup_development_release() {
 function setup_patatrack_release() {
   local DIRNAME="$1"
   local RELEASE="$2"
+  local BRANCH="$3"
   # set up the reference area
   cd "$BASE"
   echo "# set up $DIRNAME environment for release $RELEASE"
@@ -178,7 +178,7 @@ function build_matrix() {
       cd $WORKFLOW
       # extract step3 and step4 commands
       STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
-      STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/")"
+      STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --filein file:step3_inDQM.root"
       echo "# prepare workflow $WORKFLOW"
       $STEP3 $INPUT --no_exec --python_filename=step3.py
       $STEP4        --no_exec --python_filename=step4.py
@@ -496,12 +496,13 @@ function upload_log_files() {
 touch $REPORT
 
 # set up the reference release
-setup_release "reference" CMSSW_10_1_0
+setup_release "reference" CMSSW_10_2_0_pre3
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 
 # set up the current development branch
-setup_patatrack_release "development" CMSSW_10_1_0_Patatrack
+#setup_patatrack_release "development" CMSSW_10_2_0_pre3_Patatrack CMSSW_10_2_X_Patatrack
+setup_development_release "development" CMSSW_10_2_0_pre3 CMSSW_10_2_X_Patatrack
 build_matrix "development" "$WORKFLOWS"
 DIRECTORIES+=" development"
 
