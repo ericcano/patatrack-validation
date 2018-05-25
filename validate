@@ -497,26 +497,31 @@ touch $REPORT
 
 # set up the reference release
 setup_release "reference" CMSSW_10_2_0_pre3
+report "Reference release [CMSSW_10_2_0_pre3](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_0_pre3) at $(< $BASE/reference/src/.hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 
 # set up the current development branch
 #setup_patatrack_release "development" CMSSW_10_2_0_pre3_Patatrack CMSSW_10_2_X_Patatrack
 setup_development_release "development" CMSSW_10_2_0_pre3 CMSSW_10_2_X_Patatrack
+report "Development branch [CMSSW_10_2_X_Patatrack](https://github.com/cms-patatrack/cmssw/tree/CMSSW_10_2_X_Patatrack) at $(< $BASE/development/src/.hash)"
 build_matrix "development" "$WORKFLOWS"
 DIRECTORIES+=" development"
 
 # set up the development branch plus the PR(s) to be tested
 if [ "$*" ]; then
   clone_release "development" "testing"
+  report "Testing PRs:"
   for PR in "$@"; do
     git cms-merge-topic "$REPOSITORY:$PR"
-    git rev-parse --short=12 "$REPOSITORY/refs/pull/$PR/head" > .hash
+    report "  - #$PR at $(git rev-parse --short=12 "$REPOSITORY/refs/pull/$PR/head")"
   done
+  git rev-parse --short=12 HEAD > .hash
   scram b -j`nproc`
   build_matrix "testing" "$WORKFLOWS"
   DIRECTORIES+=" testing"
 fi
+report
 
 # compute a unique hash for this validation run
 JOBID=$({ echo $SCRIPTHASH; cat $(apply_and_glob "$BASE/%/src/.hash" $DIRECTORIES); } | sha1sum | cut -d' ' -f1)
