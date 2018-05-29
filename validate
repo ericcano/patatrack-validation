@@ -496,14 +496,14 @@ function upload_log_files() {
 touch $REPORT
 
 # set up the reference release
-setup_release "reference" CMSSW_10_2_0_pre3
-report "Reference release [CMSSW_10_2_0_pre3](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_0_pre3) at $(< $BASE/reference/src/.hash)"
+setup_release "reference" CMSSW_10_2_0_pre4
+report "Reference release [CMSSW_10_2_0_pre4](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_0_pre4) at $(< $BASE/reference/src/.hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 
 # set up the current development branch
-#setup_patatrack_release "development" CMSSW_10_2_0_pre3_Patatrack CMSSW_10_2_X_Patatrack
-setup_development_release "development" CMSSW_10_2_0_pre3 CMSSW_10_2_X_Patatrack
+#setup_patatrack_release "development" CMSSW_10_2_0_pre4_Patatrack CMSSW_10_2_X_Patatrack
+setup_development_release "development" CMSSW_10_2_0_pre4 CMSSW_10_2_X_Patatrack
 report "Development branch [CMSSW_10_2_X_Patatrack](https://github.com/cms-patatrack/cmssw/tree/CMSSW_10_2_X_Patatrack) at $(< $BASE/development/src/.hash)"
 build_matrix "development" "$WORKFLOWS"
 DIRECTORIES+=" development"
