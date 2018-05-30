@@ -1,0 +1,106 @@
+#! /bin/bash -e
+
+# Script for testing one or more pull requests against a reference release and an intermediate development release
+#
+# Usage:
+#   validate [PR ...]
+#
+# Note: this script relies on `visDQMUpload` and `visDQMUtils.py` being available in the same directory.
+# If they are missing they are automatically downloaded from https://github.com/rovere/dqmgui/ .
+
+# matrix workflows, default global tag and number of events
+REFERENCE_WORKFLOW="10824.5"
+WORKFLOWS="10824.5 10824.8 10824.7"
+GLOBALTAG="101X_upgrade2018_realistic_v7"
+NUMEVENTS=100
+
+# datasets used as input for the matrix-like tests
+SAMPLES="TTBAR ZMUMU"
+TTBAR="/RelValTTbar_13/CMSSW_10_2_0_pre3-PU25ns_101X_upgrade2018_realistic_v7-v1/GEN-SIM-DIGI-RAW"
+TTBAR_NUMEVENTS=100
+ZMUMU="/RelValZMM_13/CMSSW_10_2_0_pre3-101X_upgrade2018_realistic_v7-v1/GEN-SIM-DIGI-RAW"
+ZMUMU_NUMEVENTS=200
+
+# optionally, local cache of the input files
+TTBAR_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_0_pre3/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_101X_upgrade2018_realistic_v7-v1/20000/"
+TTBAR_CACHE_FILE="743848D5-8953-E811-8B0A-0CC47A4D769A.root,12589245-8A53-E811-934B-0CC47A78A496.root"
+ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_0_pre3/RelValZMM_13/GEN-SIM-DIGI-RAW/101X_upgrade2018_realistic_v7-v1/20000/"
+ZMUMU_CACHE_FILE="0055E185-E852-E811-99EA-0CC47A78A496.root,B8145888-E852-E811-8CC1-0025905A612C.root"
+
+function build_matrix() {
+  local WORKFLOWS="$@"
+  local SAMPLE DATASET WORKDIR CACHE_PATH CACHE_FILE INPUT MY_GLOBALTAG MY_NUMEVENTS WORKFLOW STEP3 STEP4
+  # create the matrix-like workflows for the various samples
+  cd $CMSSW_BASE
+  eval $(scram runtime -sh)
+  for SAMPLE in $SAMPLES; do
+    DATASET=${!SAMPLE}
+    WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
+    CACHE_PATH=$(eval echo \$$(echo $SAMPLE)_CACHE_PATH)
+    CACHE_FILE=$(eval echo \$$(echo $SAMPLE)_CACHE_FILE)
+    if [ "$CACHE_PATH" ] && [ "$CACHE_FILE" ]; then
+      INPUT="--dirin=$CACHE_PATH --filein $CACHE_FILE"
+    else
+      INPUT="--dasquery 'file dataset=$DATASET'"
+    fi
+    # customise the global tag and number of events by dataset, or use the default values
+    MY_GLOBALTAG=$(eval echo \$$(echo $SAMPLE)_GLOBALTAG)
+    MY_NUMEVENTS=$(eval echo \$$(echo $SAMPLE)_NUMEVENTS)
+    echo "# prepare to run on ${MY_NUMEVENTS:=$NUMEVENTS} events on $DATASET with ${MY_GLOBALTAG:=$GLOBALTAG} conditions"
+    mkdir -p $CMSSW_BASE/run/$WORKDIR
+    cd $CMSSW_BASE/run/$WORKDIR
+    for WORKFLOW in $WORKFLOWS; do
+      # check the the workflow actually exists in the release
+      runTheMatrix.py -n -e -l $WORKFLOW | grep -q ^$WORKFLOW || continue
+      mkdir -p $WORKFLOW
+      cd $WORKFLOW
+      # extract step3 and step4 commands
+      STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
+      STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --filein file:step3_inDQM.root"
+      echo "# prepare workflow $WORKFLOW"
+      $STEP3 $INPUT --no_exec --python_filename=step3.py
+      $STEP4        --no_exec --python_filename=step4.py
+      # add the NVProfilerService to step3
+      sed -i step3.py -e '/\# End of customisation functions/i \
+# Mark CMSSW transitions and modules in the nvprof profile\
+from FWCore.ParameterSet.Utilities import moduleLabelsInSequences\
+process.NVProfilerService = cms.Service("NVProfilerService",\
+    highlightModules = cms.untracked.vstring( moduleLabelsInSequences(process.reconstruction_step) ),\
+    showModulePrefetching = cms.untracked.bool( False )\
+)\
+'
+      cd ..
+    done
+    echo
+  done
+}
+
+function run_workflows() {
+  local WORKDIR
+  cd $CMSSW_BASE
+  for WORKDIR in run/*/*/; do
+    cd $CMSSW_BASE/$WORKDIR
+    echo "# at $WORKDIR"
+    eval $(scram runtime -sh)
+    echo -n "# running step3... "
+    if nvprof -f -o step3.nvprof -- cmsRun step3.py >& step3.log; then
+      echo "done"
+    else
+      echo "failed"
+      tail step3.log
+      # do not attempt to run step4 is step3 failed
+      continue
+    fi
+    echo -n "# running step4... "
+    if cmsRun step4.py >& step4.log; then
+      echo "done"
+    else
+      echo "failed"
+      tail step4.log
+    fi
+  done
+}
+
+# main
+build_matrix "$WORKFLOWS"
+run_workflows
