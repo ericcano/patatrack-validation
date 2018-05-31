@@ -217,7 +217,7 @@ function run_workflows() {
     echo "# at $WORKDIR"
     eval $(scram runtime -sh)
     echo -n "# running step3... "
-    if nvprof -f -o step3.nvprof -- cmsRun step3.py >& step3.log; then
+    if nvprof -f -o step3.nvprof -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
       echo "done"
     else
       echo "failed"
