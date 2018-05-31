@@ -457,7 +457,7 @@ function upload_profiles() {
   shift
   local -a TESTING_RELEASES=($@)
 
-  report "### \`nvprof/nvvp\` profiles"
+  report "### logs and \`nvprof/nvvp\` profiles"
 
   local SAMPLE
   for SAMPLE in $SAMPLES; do
@@ -466,22 +466,24 @@ function upload_profiles() {
     local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
 
     # reference release and workflow
-    local FILE=$BASE/$REFERENCE_RELEASE/run/$WORKDIR/$REFERENCE_WORKFLOW/step3.nvprof
-    if [ -f $FILE ]; then
-      cp $FILE $UPLOAD_DIR/$JOBID/$WORKDIR/$REFERENCE_RELEASE-$REFERENCE_WORKFLOW-step3.nvprof
-      report "  - $REFERENCE_RELEASE [profile]($UPLOAD_URL/$JOBID/$WORKDIR/$REFERENCE_RELEASE-$REFERENCE_WORKFLOW-step3.nvprof) for workflow $REFERENCE_WORKFLOW"
-    fi
+    local FILE=$BASE/$REFERENCE_RELEASE/run/$WORKDIR/$REFERENCE_WORKFLOW/step3
+    local PART=$JOBID/$WORKDIR/$REFERENCE_RELEASE-$REFERENCE_WORKFLOW-step3
+    [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
+    [ -f ${FILE}.nvprof  ] && cp ${FILE}.nvprof  $UPLOAD_DIR/${PART}.nvprof
+    [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
+    report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [profile]($UPLOAD_URL/${PART}.nvprof) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
 
     # development releases and workflows
     local RELEASE
     for RELEASE in ${TESTING_RELEASES[@]}; do
       local WORKFLOW
       for WORKFLOW in $WORKFLOWS; do
-        local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/step3.nvprof
-        if [ -f $FILE ]; then
-          cp $FILE $UPLOAD_DIR/$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-step3.nvprof
-          report "  - $RELEASE [profile]($UPLOAD_URL/$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-step3.nvprof) for workflow $WORKFLOW"
-        fi
+        local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/step3
+        local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-step3
+        [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
+        [ -f ${FILE}.nvprof  ] && cp ${FILE}.nvprof  $UPLOAD_DIR/${PART}.nvprof
+        [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
+        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [profile]($UPLOAD_URL/${PART}.nvprof) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
       done
     done
     report
