@@ -240,9 +240,9 @@ function run_workflows() {
 # and upload them to the EOS www area.
 #
 # Usage:
-#   make_valdation_plots REFERENCE_RELEASE [[RELEASE ...] TARGET_RELEASE]
+#   make_validation_plots REFERENCE_RELEASE [[RELEASE ...] TARGET_RELEASE]
 #
-function make_valdation_plots() {
+function make_validation_plots() {
   [ "$1" ] || return 1
   local DIRNAME="${!#}"
   local REFERENCE_RELEASE="$1"
@@ -287,17 +287,26 @@ function make_valdation_plots() {
           --html-validation-name $DATASET \
           --outputDir $UPLOAD_DIR/$JOBID/$WORKDIR/$REFERENCE_WORKFLOW \
           ${RELEASES[@]/%/-${REFERENCE_WORKFLOW}.root}
+        report "  - [tracking validation plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) for workflow $WORKFLOW"
       else
         # other workflows
-        [ "${TESTING_RELEASES[0]}" ] || continue
-        makeTrackValidationPlots.py \
-          --html-sample $DATASET \
-          --html-validation-name $DATASET \
-          --outputDir $UPLOAD_DIR/$JOBID/$WORKDIR/$WORKFLOW \
-          ${TESTING_RELEASES[0]}-${REFERENCE_WORKFLOW}.root \
-          ${TESTING_RELEASES[@]/%/-${WORKFLOW}.root}
+        local FILES=""
+        local RELEASE
+        for RELEASE in ${TESTING_RELEASES[@]}; do
+          [ -f ${RELEASE}-${WORKFLOW}.root ] && FILES="$FILES ${RELEASE}-${WORKFLOW}.root"
+        done
+        if [ "$FILES" ]; then
+          makeTrackValidationPlots.py \
+            --html-sample $DATASET \
+            --html-validation-name $DATASET \
+            --outputDir $UPLOAD_DIR/$JOBID/$WORKDIR/$WORKFLOW \
+            ${TESTING_RELEASES[0]}-${REFERENCE_WORKFLOW}.root \
+            $FILES
+          report "  - [tracking validation plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) for workflow $WORKFLOW"
+        else
+          report "  - tracking validation plots for workflow $WORKFLOW are **missing**"
+        fi
       fi
-      report "  - [tracking validation plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) for workflow $WORKFLOW"
     done
     report
   done
@@ -309,6 +318,7 @@ function make_valdation_plots() {
 #   build_dqm_link REFERENCE_DATASET [DATASET ...]
 #
 function build_dqm_link() {
+  [ "$1" ] || return
   local URL="$DQMGUI_URL/start?runnr=1;"
   URL+="dataset=$1;"
   URL+="sampletype=offline_relval;"
@@ -355,8 +365,10 @@ function build_dqm_dataset() {
   local RELEASE="$1"
   local DATASET="$2"
   local WORKFLOW="$3"
+  local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
+  local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$DQMFILE
   local HASH=$(<$BASE/$RELEASE/src/.hash)
-  echo "$(echo $DATASET | cut -d/ -f-3)-${HASH}/${WORKFLOW/./_}"
+  [ -f "$FILE" ] && echo "$(echo $DATASET | cut -d/ -f-3)-${HASH}/${WORKFLOW/./_}"
 }
 
 
@@ -466,12 +478,28 @@ function upload_profiles() {
     local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
 
     # reference release and workflow
-    local FILE=$BASE/$REFERENCE_RELEASE/run/$WORKDIR/$REFERENCE_WORKFLOW/step3
-    local PART=$JOBID/$WORKDIR/$REFERENCE_RELEASE-$REFERENCE_WORKFLOW-step3
+    local RELEASE=$REFERENCE_RELEASE
+    local WORKFLOW=$REFERENCE_WORKFLOW
+    local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/step3
+    local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-step3
     [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
     [ -f ${FILE}.nvprof  ] && cp ${FILE}.nvprof  $UPLOAD_DIR/${PART}.nvprof
     [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
-    report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [profile]($UPLOAD_URL/${PART}.nvprof) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
+    if ! [ -f ${FILE}.log ]; then
+      # if there is no log file, the workflow most likely did not run at all
+      report "  - $RELEASE log, profile and summary for workflow $WORKFLOW are **missing**"
+    else
+      # check for both profile and summary
+      if [ -f ${FILE}.nvprof ] && [ -f ${FILE}.profile ]; then
+        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [profile]($UPLOAD_URL/${PART}.nvprof) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
+      elif [ -f ${FILE}.nvprof ]; then
+        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [profile]($UPLOAD_URL/${PART}.nvprof) for workflow $WORKFLOW"
+      elif [ -f ${FILE}.profile ]; then
+        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
+      else
+        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) for workflow $WORKFLOW; profile and summary are **missing**"
+      fi
+    fi
 
     # development releases and workflows
     local RELEASE
@@ -483,7 +511,21 @@ function upload_profiles() {
         [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
         [ -f ${FILE}.nvprof  ] && cp ${FILE}.nvprof  $UPLOAD_DIR/${PART}.nvprof
         [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
-        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [profile]($UPLOAD_URL/${PART}.nvprof) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
+        if ! [ -f ${FILE}.log ]; then
+          # if there is no log file, the workflow most likely did not run at all
+          report "  - $RELEASE log, profile and summary for workflow $WORKFLOW are **missing**"
+        else
+          # check for both profile and summary
+          if [ -f ${FILE}.nvprof ] && [ -f ${FILE}.profile ]; then
+            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [profile]($UPLOAD_URL/${PART}.nvprof) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
+          elif [ -f ${FILE}.nvprof ]; then
+            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [profile]($UPLOAD_URL/${PART}.nvprof) for workflow $WORKFLOW"
+          elif [ -f ${FILE}.profile ]; then
+            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
+          else
+            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) for workflow $WORKFLOW; profile and summary are **missing**"
+          fi
+        fi
       done
     done
     report
@@ -510,13 +552,14 @@ function upload_log_files() {
 touch $REPORT
 
 # set up the reference release
+report "### Validation summary"
 setup_release "reference" CMSSW_10_2_0_pre4
 report "Reference release [CMSSW_10_2_0_pre4](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_0_pre4) at $(< $BASE/reference/src/.hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 
 # set up the current development branch
-setup_patatrack_release "development" CMSSW_10_2_0_pre4_Patatrack CMSSW_10_2_X_Patatrack
+setup_patatrack_release "development" CMSSW_10_2_0_pre4_Patatrack2 CMSSW_10_2_X_Patatrack
 #setup_development_release "development" CMSSW_10_2_0_pre4 CMSSW_10_2_X_Patatrack
 report "Development branch [CMSSW_10_2_X_Patatrack](https://github.com/cms-patatrack/cmssw/tree/CMSSW_10_2_X_Patatrack) at $(< $BASE/development/src/.hash)"
 build_matrix "development" "$WORKFLOWS"
@@ -543,7 +586,7 @@ JOBID=$({ echo $SCRIPTHASH; cat $(apply_and_glob "$BASE/%/src/.hash" $DIRECTORIE
 # run the workflows
 run_workflows $DIRECTORIES
 # make validation plots
-make_valdation_plots $DIRECTORIES
+make_validation_plots $DIRECTORIES
 # upload DQM plots to the GUI
 upload_dqm_plots $DIRECTORIES
 # upload nvprof profiles
