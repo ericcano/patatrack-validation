@@ -132,11 +132,11 @@ function setup_patatrack_release() {
     echo "/.clang-format"
   } > $CMSSW_BASE/src/.git/info/sparse-checkout
   git read-tree -mu HEAD
-  git cms-remote add cms-patatrack
-  git fetch cms-patatrack $BRANCH:$BRANCH $RELEASE:from-$RELEASE
-  git branch $BRANCH -u cms-patatrack/$BRANCH
-  git branch from-$RELEASE -u cms-patatrack/$BRANCH
-  git checkout from-$RELEASE
+  git cms-remote add $REPOSITORY
+  git checkout $RELEASE -b $BRANCH
+  git branch -u $REPOSITORY/$BRANCH
+  git checkout $RELEASE -b from-$RELEASE
+
 
   # <add here any required pull request or external update>
   scram b -j`nproc`
@@ -559,9 +559,9 @@ build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 
 # set up the current development branch
-#setup_patatrack_release "development" CMSSW_10_2_0_pre5_Patatrack CMSSW_10_2_X_Patatrack
-setup_development_release "development" CMSSW_10_2_0_pre5 CMSSW_10_2_X_Patatrack
-report "Development branch [CMSSW_10_2_X_Patatrack](https://github.com/cms-patatrack/cmssw/tree/CMSSW_10_2_X_Patatrack) at $(< $BASE/development/src/.hash)"
+setup_patatrack_release "development" CMSSW_10_2_0_pre5_Patatrack CMSSW_10_2_X_Patatrack
+#setup_development_release "development" CMSSW_10_2_0_pre5 CMSSW_10_2_X_Patatrack
+report "Development branch [CMSSW_10_2_X_Patatrack](https://github.com/$REPOSITORY/cmssw/tree/CMSSW_10_2_X_Patatrack) at $(< $BASE/development/src/.hash)"
 build_matrix "development" "$WORKFLOWS"
 DIRECTORIES+=" development"
 
