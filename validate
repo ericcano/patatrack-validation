@@ -132,13 +132,11 @@ function setup_patatrack_release() {
     echo "/.clang-format"
   } > $CMSSW_BASE/src/.git/info/sparse-checkout
   git read-tree -mu HEAD
-  git cms-remote add $REPOSITORY
-  git checkout $RELEASE -b $BRANCH
-  git branch -u $REPOSITORY/$BRANCH
-  git checkout $RELEASE -b from-$RELEASE
-
-
   # <add here any required pull request or external update>
+  git cms-remote add $REPOSITORY
+  git checkout $REPOSITORY/$BRANCH -b $BRANCH
+  git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u) || true
+  git cms-checkdeps -a
   scram b -j`nproc`
   git rev-parse --short=12 HEAD > .hash
   if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
