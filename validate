@@ -217,7 +217,7 @@ function run_workflows() {
     echo "# at $WORKDIR"
     eval $(scram runtime -sh)
     echo -n "# running step3... "
-    if nvprof -f -o step3.nvprof -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
+    if nvprof -f -o step3.nvvp -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
       echo "done"
     else
       echo "failed"
@@ -483,21 +483,21 @@ function upload_profiles() {
     local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/step3
     local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-step3
     [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
-    [ -f ${FILE}.nvprof  ] && cp ${FILE}.nvprof  $UPLOAD_DIR/${PART}.nvprof
+    [ -f ${FILE}.nvvp    ] && cp ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
     [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
     if ! [ -f ${FILE}.log ]; then
       # if there is no log file, the workflow most likely did not run at all
       report "  - $RELEASE log, profile and summary for workflow $WORKFLOW are **missing**"
     else
       # check for both profile and summary
-      if [ -f ${FILE}.nvprof ] && [ -f ${FILE}.profile ]; then
-        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [profile]($UPLOAD_URL/${PART}.nvprof) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
-      elif [ -f ${FILE}.nvprof ]; then
-        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [profile]($UPLOAD_URL/${PART}.nvprof) for workflow $WORKFLOW"
+      if [ -f ${FILE}.nvvp ] && [ -f ${FILE}.profile ]; then
+        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
+      elif [ -f ${FILE}.nvvp ]; then
+        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [visual profile]($UPLOAD_URL/${PART}.nvvp) for workflow $WORKFLOW"
       elif [ -f ${FILE}.profile ]; then
         report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
       else
-        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) for workflow $WORKFLOW; profile and summary are **missing**"
+        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) for workflow $WORKFLOW; visual profile and summary are **missing**"
       fi
     fi
 
@@ -509,21 +509,21 @@ function upload_profiles() {
         local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/step3
         local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-step3
         [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
-        [ -f ${FILE}.nvprof  ] && cp ${FILE}.nvprof  $UPLOAD_DIR/${PART}.nvprof
+        [ -f ${FILE}.nvvp    ] && cp ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
         [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
         if ! [ -f ${FILE}.log ]; then
           # if there is no log file, the workflow most likely did not run at all
           report "  - $RELEASE log, profile and summary for workflow $WORKFLOW are **missing**"
         else
           # check for both profile and summary
-          if [ -f ${FILE}.nvprof ] && [ -f ${FILE}.profile ]; then
-            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [profile]($UPLOAD_URL/${PART}.nvprof) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
-          elif [ -f ${FILE}.nvprof ]; then
-            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [profile]($UPLOAD_URL/${PART}.nvprof) for workflow $WORKFLOW"
+          if [ -f ${FILE}.nvvp ] && [ -f ${FILE}.profile ]; then
+            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
+          elif [ -f ${FILE}.nvvp ]; then
+            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [visual profile]($UPLOAD_URL/${PART}.nvvp) for workflow $WORKFLOW"
           elif [ -f ${FILE}.profile ]; then
             report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
           else
-            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) for workflow $WORKFLOW; profile and summary are **missing**"
+            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) for workflow $WORKFLOW; visual profile and summary are **missing**"
           fi
         fi
       done
