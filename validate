@@ -29,16 +29,16 @@ NUMEVENTS=100
 
 # datasets used as input for the matrix-like tests
 SAMPLES="TTBAR ZMUMU"
-TTBAR="/RelValTTbar_13/CMSSW_10_2_0_pre5-PU25ns_102X_upgrade2018_realistic_v1-v1/GEN-SIM-DIGI-RAW"
+TTBAR="/RelValTTbar_13/CMSSW_10_2_0_pre6-PU25ns_102X_upgrade2018_realistic_v7-v1/GEN-SIM-DIGI-RAW"
 TTBAR_NUMEVENTS=100
-ZMUMU="/RelValZMM_13/CMSSW_10_2_0_pre5-102X_upgrade2018_realistic_v1-v1/GEN-SIM-DIGI-RAW"
+ZMUMU="/RelValZMM_13/CMSSW_10_2_0_pre6-102X_upgrade2018_realistic_v7-v1/GEN-SIM-DIGI-RAW"
 ZMUMU_NUMEVENTS=200
 
 # optionally, local cache of the input files
-TTBAR_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_0_pre5/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_102X_upgrade2018_realistic_v1-v1/20000/"
-TTBAR_CACHE_FILE="5CBF1085-326E-E811-9C4E-0CC47A4D7678.root,CAABCA15-336E-E811-A067-0CC47A4C8E66.root"
-ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_0_pre5/RelValZMM_13/GEN-SIM-DIGI-RAW/102X_upgrade2018_realistic_v1-v1/20000/"
-ZMUMU_CACHE_FILE="62C2D6D7-8C6A-E811-8F33-0CC47A4D76AA.root,E4D935DA-8C6A-E811-8DBE-0CC47A4D767E.root"
+TTBAR_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_0_pre6/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_102X_upgrade2018_realistic_v7-v1/10000/"
+TTBAR_CACHE_FILE="EEE454E8-367E-E811-AF9D-0CC47A4D76AA.root"
+ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_0_pre6/RelValZMM_13/GEN-SIM-DIGI-RAW/102X_upgrade2018_realistic_v7-v1/10000/"
+ZMUMU_CACHE_FILE="70226CCB-A77B-E811-B51F-0CC47A78A446.root,1E870FB1-A77B-E811-A95C-0CC47A4D7690.root"
 
 # DQM files produced by step4
 DQMFILE="DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root"
@@ -551,14 +551,14 @@ touch $REPORT
 
 # set up the reference release
 report "### Validation summary"
-setup_release "reference" CMSSW_10_2_0_pre5
-report "Reference release [CMSSW_10_2_0_pre5](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_0_pre5) at $(< $BASE/reference/src/.hash)"
+setup_release "reference" CMSSW_10_2_0_pre6
+report "Reference release [CMSSW_10_2_0_pre6](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_0_pre6) at $(< $BASE/reference/src/.hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 
 # set up the current development branch
-setup_patatrack_release "development" CMSSW_10_2_0_pre5_Patatrack CMSSW_10_2_X_Patatrack
-#setup_development_release "development" CMSSW_10_2_0_pre5 CMSSW_10_2_X_Patatrack
+setup_patatrack_release "development" CMSSW_10_2_0_pre6_Patatrack CMSSW_10_2_X_Patatrack
+#setup_development_release "development" CMSSW_10_2_0_pre6 CMSSW_10_2_X_Patatrack
 report "Development branch [CMSSW_10_2_X_Patatrack](https://github.com/$REPOSITORY/cmssw/tree/CMSSW_10_2_X_Patatrack) at $(< $BASE/development/src/.hash)"
 build_matrix "development" "$WORKFLOWS"
 DIRECTORIES+=" development"
