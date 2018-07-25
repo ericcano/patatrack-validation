@@ -13,6 +13,8 @@ REFERENCE_WORKFLOW="10824.5"
 WORKFLOWS="10824.5 10824.8 10824.7 10824.9"
 GLOBALTAG="102X_upgrade2018_realistic_v1"
 NUMEVENTS=100
+THREADS=1
+STREAMS=1
 
 # datasets used as input for the matrix-like tests
 SAMPLES="TTBAR ZMUMU"
@@ -72,6 +74,10 @@ process.NVProfilerService = cms.Service("NVProfilerService",\
     showModulePrefetching = cms.untracked.bool( False )\
 )\
 '
+      echo >> step3.py
+      echo "# Configure multithreading" >> step3.py
+      echo "process.options.numberOfThreads = cms.untracked.uint32( $THREADS )" >> step3.py
+      echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> step3.py
       cd ..
     done
     echo

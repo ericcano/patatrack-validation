@@ -27,6 +27,8 @@ REFERENCE_WORKFLOW="10824.5"
 WORKFLOWS="10824.5 10824.8 10824.7 10824.9"
 GLOBALTAG="102X_upgrade2018_realistic_v1"
 NUMEVENTS=100
+THREADS=1
+STREAMS=1
 
 # datasets used as input for the matrix-like tests
 SAMPLES="TTBAR ZMUMU"
@@ -87,6 +89,7 @@ function setup_release() {
   scram project -n $DIRNAME CMSSW $RELEASE
   cd $DIRNAME/src
   eval $(scram runtime -sh)
+  export LD_LIBRARY_PATH=$(echo $(echo $LD_LIBRARY_PATH | tr : '\n' | grep -v 'cuda.*drivers') | tr ' ' :)
   git cms-init --upstream-only
   echo
   # <add here any required pull request or external update>
@@ -125,6 +128,7 @@ function setup_patatrack_release() {
   scram project -n $DIRNAME CMSSW $RELEASE
   cd $DIRNAME/src
   eval $(scram runtime -sh)
+  export LD_LIBRARY_PATH=$(echo $(echo $LD_LIBRARY_PATH | tr : '\n' | grep -v 'cuda.*drivers') | tr ' ' :)
   # git needs some special care
   git cms-init --upstream-only || true
   git config core.sparsecheckout true
@@ -156,6 +160,7 @@ function clone_release() {
   cd "$TARGET"/src
   scram b ProjectRename
   eval $(scram runtime -sh)
+  export LD_LIBRARY_PATH=$(echo $(echo $LD_LIBRARY_PATH | tr : '\n' | grep -v 'cuda.*drivers') | tr ' ' :)
   echo
 }
 
@@ -167,6 +172,7 @@ function build_matrix() {
   # create the matrix-like workflows for the various samples
   cd $BASE/$DIRNAME
   eval $(scram runtime -sh)
+  export LD_LIBRARY_PATH=$(echo $(echo $LD_LIBRARY_PATH | tr : '\n' | grep -v 'cuda.*drivers') | tr ' ' :)
   for SAMPLE in $SAMPLES; do
     DATASET=${!SAMPLE}
     WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
@@ -203,6 +209,10 @@ process.NVProfilerService = cms.Service("NVProfilerService",\
     showModulePrefetching = cms.untracked.bool( False )\
 )\
 '
+      echo >> step3.py
+      echo "# Configure multithreading" >> step3.py
+      echo "process.options.numberOfThreads = cms.untracked.uint32( $THREADS )" >> step3.py
+      echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> step3.py
       cd ..
     done
     echo
@@ -216,6 +226,7 @@ function run_workflows() {
     cd $BASE/$WORKDIR
     echo "# at $WORKDIR"
     eval $(scram runtime -sh)
+    export LD_LIBRARY_PATH=$(echo $(echo $LD_LIBRARY_PATH | tr : '\n' | grep -v 'cuda.*drivers') | tr ' ' :)
     echo -n "# running step3... "
     if nvprof -f -o step3.nvvp -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
       echo "done"
@@ -251,6 +262,7 @@ function make_validation_plots() {
   local -a TESTING_RELEASES=($@)
   cd $BASE/$DIRNAME
   eval $(scram runtime -sh)
+  export LD_LIBRARY_PATH=$(echo $(echo $LD_LIBRARY_PATH | tr : '\n' | grep -v 'cuda.*drivers') | tr ' ' :)
 
   report "### \`makeTrackValidationPlots.py\` plots"
 
