@@ -165,6 +165,11 @@ function clone_release() {
   echo
 }
 
+function has_profiling() {
+  local WORKFLOW=$1
+  echo "$PROFILING" | grep -q -w "$WORKFLOW"
+}
+
 function build_matrix() {
   local DIRNAME="$1"
   shift
@@ -216,7 +221,7 @@ process.NVProfilerService = cms.Service("NVProfilerService",\
       echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> step3.py
 
       local CUSTOMISE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
-      if echo "$PROFILING" | grep -q -w "$WORKFLOW" && ( [ -f $CMSSW_RELEASE_BASE/python/${CUSTOMISE}.py ] || [ -f $CMSSW_BASE/python/${CUSTOMISE}.py ] ); then
+      if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${CUSTOMISE}.py ] || [ -f $CMSSW_BASE/python/${CUSTOMISE}.py ] ); then
         # create a profiling workflow
         $STEP3 $INPUT --no_exec --customise ${CUSTOMISE}.customizePixelTracksForProfiling --python_filename=profile.py
         # add the NVProfilerService to profile
@@ -498,41 +503,45 @@ function upload_dqm_plots() {
 # Upload the output of a validation job
 #
 # Usage
-#  upload_artifacts RELEASE WORKDIR WORKFLOW NAME
+#  upload_artefacts RELEASE WORKDIR WORKFLOW NAME
 #
-function upload_artifacts() {
+function upload_artefacts() {
   local RELEASE=$1
   local WORKDIR=$2
   local WORKFLOW=$3
-  local NAME=$4
-  local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$NAME
-  local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-$NAME
-  # upload the python configuration file, log, and nvprof results (if they exist)
-  [ -f ${FILE}.py      ] && cp ${FILE}.py      $UPLOAD_DIR/${PART}.py 
-  [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
-  [ -f ${FILE}.nvvp    ] && cp ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
-  [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
-  # update the report
-  if ! [ -f ${FILE}.py ]; then 
-    # the workflow has not been created
-    report "  - $RELEASE release, workflow $WORKFLOW: the python configuration was not created, see the full log for more information"
-    return
-  fi
-  if ! [ -f ${FILE}.log ]; then
-    # if there is no log file, the workflow most likely did not run at all
-    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): log, profile and summary are **missing**, see the full log for more information"
-    return
-  fi
-  # check for both profile and summary
-  if [ -f ${FILE}.nvvp ] && [ -f ${FILE}.profile ]; then
-    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile)"
-  elif [ -f ${FILE}.nvvp ]; then
-    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [visual profile]($UPLOAD_URL/${PART}.nvvp)"
-  elif [ -f ${FILE}.profile ]; then
-    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile)"
-  else
-    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log); the visual profile and summary are **missing**"
-  fi
+  report "  - $RELEASE release, workflow $WORKFLOW"
+
+  shift 3
+  for NAME in "$@"; do
+    local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$NAME
+    local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-$NAME
+    # upload the python configuration file, log, and nvprof results (if they exist)
+    [ -f ${FILE}.py      ] && cp ${FILE}.py      $UPLOAD_DIR/${PART}.py
+    [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
+    [ -f ${FILE}.nvvp    ] && cp ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
+    [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
+    # update the report
+    if ! [ -f ${FILE}.py ]; then
+      # the workflow has not been created
+      report "      - ${NAME}.py: the python configuration was not created, see the full log for more information"
+      continue
+    fi
+    if ! [ -f ${FILE}.log ]; then
+      # if there is no log file, the workflow most likely did not run at all
+      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): log, profile and summary are **missing**, see the full log for more information"
+      continue
+    fi
+    # check for both profile and summary
+    if [ -f ${FILE}.nvvp ] && [ -f ${FILE}.profile ]; then
+      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile)"
+    elif [ -f ${FILE}.nvvp ]; then
+      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [visual profile]($UPLOAD_URL/${PART}.nvvp)"
+    elif [ -f ${FILE}.profile ]; then
+      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile)"
+    else
+      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log); the visual profile and summary are **missing**"
+    fi
+  done
 }
 
 # Upload nvprof profiles
@@ -547,7 +556,7 @@ function upload_profiles() {
   shift
   local -a TESTING_RELEASES=($@)
 
-  report "### logs and \`nvprof/nvvp\` profiles"
+  report "### logs and \`nvprof\`/\`nvvp\` profiles"
 
   local SAMPLE
   for SAMPLE in $SAMPLES; do
@@ -556,16 +565,22 @@ function upload_profiles() {
     local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
 
     # reference release and workflow
-    upload_artifacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW step3
-    upload_artifacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW profile
+    if has_profiling "$REFERENCE_WORKFLOW"; then
+      upload_artefacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW step3 profile
+    else
+      upload_artefacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW step3
+    fi
 
     # development releases and workflows
     local RELEASE
     for RELEASE in ${TESTING_RELEASES[@]}; do
       local WORKFLOW
       for WORKFLOW in $WORKFLOWS; do
-        upload_artifacts $RELEASE $WORKDIR $WORKFLOW step3
-        upload_artifacts $RELEASE $WORKDIR $WORKFLOW profile
+        if has_profiling "$WORKFLOW"; then
+          upload_artefacts $RELEASE $WORKDIR $WORKFLOW step3 profile
+        else
+          upload_artefacts $RELEASE $WORKDIR $WORKFLOW step3
+        fi
       done
     done
     report
