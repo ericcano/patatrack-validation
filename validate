@@ -25,6 +25,7 @@ REPOSITORY=cms-patatrack
 # matrix workflows, default global tag and number of events
 REFERENCE_WORKFLOW="10824.5"
 WORKFLOWS="10824.5 10824.8 10824.7 10824.9"
+PROFILING="10824.5 10824.8"
 GLOBALTAG="102X_upgrade2018_realistic_v1"
 NUMEVENTS=100
 THREADS=1
@@ -233,7 +234,7 @@ function run_workflows() {
     else
       echo "failed"
       tail step3.log
-      # do not attempt to run step4 is step3 failed
+      # do not attempt to run step4 if step3 failed
       continue
     fi
     echo -n "# running step4... "
@@ -469,6 +470,46 @@ function upload_dqm_plots() {
   done
 }
 
+# Upload the output of a validation job
+#
+# Usage
+#  upload_artifacts RELEASE WORKDIR WORKFLOW NAME
+#
+function upload_artifacts() {
+  local RELEASE=$1
+  local WORKDIR=$2
+  local WORKFLOW=$3
+  local NAME=$4
+  local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$NAME
+  local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-$NAME
+  # upload the python configuration file, log, and nvprof results (if they exist)
+  [ -f ${FILE}.py      ] && cp ${FILE}.py      $UPLOAD_DIR/${PART}.py 
+  [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
+  [ -f ${FILE}.nvvp    ] && cp ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
+  [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
+  # update the report
+  if ! [ -f ${FILE}.py ]; then 
+    # the workflow has not been created
+    report "  - $RELEASE release, workflow $WORKFLOW: the python configuration was not created, see the full log for more information"
+    return
+  fi
+  if ! [ -f ${FILE}.log ]; then
+    # if there is no log file, the workflow most likely did not run at all
+    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): log, profile and summary are **missing**, see the full log for more information"
+    return
+  fi
+  # check for both profile and summary
+  if [ -f ${FILE}.nvvp ] && [ -f ${FILE}.profile ]; then
+    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile)"
+  elif [ -f ${FILE}.nvvp ]; then
+    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [visual profile]($UPLOAD_URL/${PART}.nvvp)"
+  elif [ -f ${FILE}.profile ]; then
+    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile)"
+  else
+    report "  - $RELEASE release, workflow [$WORKFLOW]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log); the visual profile and summary are **missing**"
+  fi
+}
+
 # Upload nvprof profiles
 #
 # Usage:
@@ -490,54 +531,14 @@ function upload_profiles() {
     local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
 
     # reference release and workflow
-    local RELEASE=$REFERENCE_RELEASE
-    local WORKFLOW=$REFERENCE_WORKFLOW
-    local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/step3
-    local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-step3
-    [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
-    [ -f ${FILE}.nvvp    ] && cp ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
-    [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
-    if ! [ -f ${FILE}.log ]; then
-      # if there is no log file, the workflow most likely did not run at all
-      report "  - $RELEASE log, profile and summary for workflow $WORKFLOW are **missing**"
-    else
-      # check for both profile and summary
-      if [ -f ${FILE}.nvvp ] && [ -f ${FILE}.profile ]; then
-        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
-      elif [ -f ${FILE}.nvvp ]; then
-        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [visual profile]($UPLOAD_URL/${PART}.nvvp) for workflow $WORKFLOW"
-      elif [ -f ${FILE}.profile ]; then
-        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
-      else
-        report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) for workflow $WORKFLOW; visual profile and summary are **missing**"
-      fi
-    fi
+    upload_artifacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW step3
 
     # development releases and workflows
     local RELEASE
     for RELEASE in ${TESTING_RELEASES[@]}; do
       local WORKFLOW
       for WORKFLOW in $WORKFLOWS; do
-        local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/step3
-        local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-step3
-        [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
-        [ -f ${FILE}.nvvp    ] && cp ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
-        [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
-        if ! [ -f ${FILE}.log ]; then
-          # if there is no log file, the workflow most likely did not run at all
-          report "  - $RELEASE log, profile and summary for workflow $WORKFLOW are **missing**"
-        else
-          # check for both profile and summary
-          if [ -f ${FILE}.nvvp ] && [ -f ${FILE}.profile ]; then
-            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
-          elif [ -f ${FILE}.nvvp ]; then
-            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [visual profile]($UPLOAD_URL/${PART}.nvvp) for workflow $WORKFLOW"
-          elif [ -f ${FILE}.profile ]; then
-            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile) for workflow $WORKFLOW"
-          else
-            report "  - $RELEASE [log]($UPLOAD_URL/${PART}.log) for workflow $WORKFLOW; visual profile and summary are **missing**"
-          fi
-        fi
+        upload_artifacts $RELEASE $WORKDIR $WORKFLOW step3
       done
     done
     report
