@@ -214,6 +214,25 @@ process.NVProfilerService = cms.Service("NVProfilerService",\
       echo "# Configure multithreading" >> step3.py
       echo "process.options.numberOfThreads = cms.untracked.uint32( $THREADS )" >> step3.py
       echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> step3.py
+
+      local CUSTOMISE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
+      if echo "$PROFILING" | grep -q -w "$WORKFLOW" && ( [ -f $CMSSW_RELEASE_BASE/python/${CUSTOMISE}.py ] || [ -f $CMSSW_BASE/python/${CUSTOMISE}.py ] ); then
+        # create a profiling workflow
+        $STEP3 $INPUT --no_exec --customise ${CUSTOMISE}.customizePixelTracksForProfiling --python_filename=profile.py
+        # add the NVProfilerService to profile
+        sed -i profile.py -e '/\# End of customisation functions/i \
+# Mark CMSSW transitions and modules in the nvprof profile\
+from FWCore.ParameterSet.Utilities import moduleLabelsInSequences\
+process.NVProfilerService = cms.Service("NVProfilerService",\
+    highlightModules = cms.untracked.vstring( moduleLabelsInSequences(process.reconstruction_step) ),\
+    showModulePrefetching = cms.untracked.bool( False )\
+)\
+'
+        echo >> profile.py
+        echo "# Configure multithreading" >> profile.py
+        echo "process.options.numberOfThreads = cms.untracked.uint32( $THREADS )" >> profile.py
+        echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> profile.py
+      fi
       cd ..
     done
     echo
@@ -234,7 +253,7 @@ function run_workflows() {
     else
       echo "failed"
       tail step3.log
-      # do not attempt to run step4 if step3 failed
+      # do not attempt to run step4 or profile if step3 failed
       continue
     fi
     echo -n "# running step4... "
@@ -243,6 +262,12 @@ function run_workflows() {
     else
       echo "failed"
       tail step4.log
+    fi
+    [ -f profile.py ] && if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
+      echo "done"
+    else
+      echo "failed"
+      tail profile.log
     fi
   done
   cd $BASE
@@ -532,6 +557,7 @@ function upload_profiles() {
 
     # reference release and workflow
     upload_artifacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW step3
+    upload_artifacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW profile
 
     # development releases and workflows
     local RELEASE
@@ -539,6 +565,7 @@ function upload_profiles() {
       local WORKFLOW
       for WORKFLOW in $WORKFLOWS; do
         upload_artifacts $RELEASE $WORKDIR $WORKFLOW step3
+        upload_artifacts $RELEASE $WORKDIR $WORKFLOW profile
       done
     done
     report
