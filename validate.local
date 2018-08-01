@@ -11,6 +11,7 @@
 # matrix workflows, default global tag and number of events
 REFERENCE_WORKFLOW="10824.5"
 WORKFLOWS="10824.5 10824.8 10824.7 10824.9"
+PROFILING="10824.5 10824.8"
 GLOBALTAG="102X_upgrade2018_realistic_v1"
 NUMEVENTS=100
 THREADS=1
@@ -31,6 +32,15 @@ ZMUMU_CACHE_FILE="70226CCB-A77B-E811-B51F-0CC47A78A446.root,1E870FB1-A77B-E811-A
 
 # DQM files produced by step4
 DQMFILE="DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root"
+
+function report() {
+  echo "$@"
+}
+
+function has_profiling() {
+  local WORKFLOW=$1
+  echo "$PROFILING" | grep -q -w "$WORKFLOW"
+}
 
 function build_matrix() {
   local WORKFLOWS="$@"
@@ -73,11 +83,36 @@ process.NVProfilerService = cms.Service("NVProfilerService",\
     highlightModules = cms.untracked.vstring( moduleLabelsInSequences(process.reconstruction_step) ),\
     showModulePrefetching = cms.untracked.bool( False )\
 )\
+\
+# Show CUDAService messages\
+process.MessageLogger.categories.append("CUDAService")\
 '
       echo >> step3.py
       echo "# Configure multithreading" >> step3.py
       echo "process.options.numberOfThreads = cms.untracked.uint32( $THREADS )" >> step3.py
       echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> step3.py
+
+      local CUSTOMISE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
+      if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${CUSTOMISE}.py ] || [ -f $CMSSW_BASE/python/${CUSTOMISE}.py ] ); then
+        # create a profiling workflow
+        $STEP3 $INPUT --no_exec --customise ${CUSTOMISE}.customizePixelTracksForProfiling --python_filename=profile.py
+        # add the NVProfilerService to profile
+        sed -i profile.py -e '/\# End of customisation functions/i \
+# Mark CMSSW transitions and modules in the nvprof profile\
+from FWCore.ParameterSet.Utilities import moduleLabelsInSequences\
+process.NVProfilerService = cms.Service("NVProfilerService",\
+    highlightModules = cms.untracked.vstring( moduleLabelsInSequences(process.reconstruction_step) ),\
+    showModulePrefetching = cms.untracked.bool( False )\
+)\
+\
+# Show CUDAService messages\
+process.MessageLogger.categories.append("CUDAService")\
+'
+        echo >> profile.py
+        echo "# Configure multithreading" >> profile.py
+        echo "process.options.numberOfThreads = cms.untracked.uint32( $THREADS )" >> profile.py
+        echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> profile.py
+      fi
       cd ..
     done
     echo
@@ -92,12 +127,12 @@ function run_workflows() {
     echo "# at $WORKDIR"
     eval $(scram runtime -sh)
     echo -n "# running step3... "
-    if nvprof -f -o step3.nvprof -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
+    if nvprof -f -o step3.nvvp -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
       echo "done"
     else
       echo "failed"
       tail step3.log
-      # do not attempt to run step4 is step3 failed
+      # do not attempt to run step4 or profile if step3 failed
       continue
     fi
     echo -n "# running step4... "
@@ -106,6 +141,12 @@ function run_workflows() {
     else
       echo "failed"
       tail step4.log
+    fi
+    [ -f profile.py ] && if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
+      echo "done"
+    else
+      echo "failed"
+      tail profile.log
     fi
   done
 }
@@ -117,12 +158,12 @@ function run_workflows() {
 #   make_validation_plots
 #
 function make_validation_plots() {
-  echo "### \`makeTrackValidationPlots.py\` plots"
+  report "### \`makeTrackValidationPlots.py\` plots"
 
   local SAMPLE
   for SAMPLE in $SAMPLES; do
     local DATASET=${!SAMPLE}
-    echo "#### $DATASET"
+    report "#### $DATASET"
     local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
     mkdir -p $CMSSW_BASE/plots/$WORKDIR
     cd $CMSSW_BASE/plots/$WORKDIR
