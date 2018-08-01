@@ -330,7 +330,7 @@ function make_validation_plots() {
           --html-validation-name $DATASET \
           --outputDir $UPLOAD_DIR/$JOBID/$WORKDIR/$REFERENCE_WORKFLOW \
           ${RELEASES[@]/%/-${REFERENCE_WORKFLOW}.root}
-        report "  - [tracking validation plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) for workflow $WORKFLOW"
+        report "  - tracking validation [plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) and [summary]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/plots_summary.html) for workflow $WORKFLOW"
       else
         # other workflows
         local FILES=""
@@ -343,11 +343,12 @@ function make_validation_plots() {
             --html-sample $DATASET \
             --html-validation-name $DATASET \
             --outputDir $UPLOAD_DIR/$JOBID/$WORKDIR/$WORKFLOW \
+            ${REFERENCE_RELEASE}-${REFERENCE_WORKFLOW}.root \
             ${TESTING_RELEASES[0]}-${REFERENCE_WORKFLOW}.root \
             $FILES
-          report "  - [tracking validation plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) for workflow $WORKFLOW"
+          report "  - tracking validation [plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) and [summary]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/plots_summary.html) for workflow $WORKFLOW"
         else
-          report "  - tracking validation plots for workflow $WORKFLOW are **missing**"
+          report "  - tracking validation plots and summary for workflow $WORKFLOW are **missing**"
         fi
       fi
     done
