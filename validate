@@ -12,6 +12,7 @@
 SCRIPTHASH=$(sha1sum ${BASH_SOURCE[0]} | cut -d' ' -f1)
 
 BASE=$(mktemp -d -p $PWD run.XXXXXXXXXX)
+[ -d $BASE ] || exit 1
 REPORT=$BASE/report.md
 JSON=$BASE/report.json
 
@@ -26,10 +27,16 @@ REPOSITORY=cms-patatrack
 REFERENCE_WORKFLOW="10824.5"
 WORKFLOWS="10824.5 10824.8 10824.7 10824.9"
 PROFILING="10824.5 10824.8"
+MEMCHECKS="10824.8 10824.9"
 GLOBALTAG="102X_upgrade2018_realistic_v1"
 NUMEVENTS=100
 THREADS=1
 STREAMS=1
+
+# cuda-memcheck tools options
+INITCHECK_OPTS="--track-unused-memory no"
+MEMCHECK_OPTS="--leak-check full --report-api-errors all"
+SYNCCHECK_OPTS=""
 
 # datasets used as input for the matrix-like tests
 SAMPLES="TTBAR ZMUMU"
@@ -95,7 +102,7 @@ function setup_release() {
   # <add here any required pull request or external update>
   #git cms-addpkg HeterogeneousCore
   #scram b -j
-  git rev-parse --short=12 HEAD > .hash
+  git rev-parse --short=12 HEAD > ../hash
   echo
 }
 
@@ -110,7 +117,7 @@ function setup_development_release() {
   git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u) || true
   git cms-checkdeps -a
   scram b -j
-  git rev-parse --short=12 HEAD > .hash
+  git rev-parse --short=12 HEAD > ../hash
   if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
     echo "# update $DIRNAME environment on branch $BRANCH with"
     git log --oneline --reverse --no-decorate ${RELEASE}..
@@ -143,7 +150,7 @@ function setup_patatrack_release() {
   git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u) || true
   git cms-checkdeps -a
   scram b -j
-  git rev-parse --short=12 HEAD > .hash
+  git rev-parse --short=12 HEAD > ../hash
   if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
     echo "# update $DIRNAME environment on branch $BRANCH with"
     git log --oneline --reverse --no-decorate ${RELEASE}..
@@ -165,6 +172,11 @@ function clone_release() {
 function has_profiling() {
   local WORKFLOW=$1
   echo "$PROFILING" | grep -q -w "$WORKFLOW"
+}
+
+function has_memcheck() {
+  local WORKFLOW=$1
+  echo "$MEMCHECKS" | grep -q -w "$WORKFLOW"
 }
 
 function build_matrix() {
@@ -221,6 +233,8 @@ process.MessageLogger.categories.append("CUDAService")\
 
       local CUSTOMISE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
       if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${CUSTOMISE}.py ] || [ -f $CMSSW_BASE/python/${CUSTOMISE}.py ] ); then
+        # mark the workflow to run the profiling job
+        touch .has_profiling
         # create a profiling workflow
         $STEP3 $INPUT --no_exec --customise ${CUSTOMISE}.customizePixelTracksForProfiling --python_filename=profile.py
         # add the NVProfilerService to profile
@@ -240,6 +254,12 @@ process.MessageLogger.categories.append("CUDAService")\
         echo "process.options.numberOfThreads = cms.untracked.uint32( $THREADS )" >> profile.py
         echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> profile.py
       fi
+
+      if has_memcheck $WORKFLOW; then
+        # mark the workflow to run the various cuda-memcheck checks
+        touch .has_memcheck
+      fi
+
       cd ..
     done
     echo
@@ -248,32 +268,79 @@ process.MessageLogger.categories.append("CUDAService")\
 
 function run_workflows() {
   local WORKDIR
+  local STEP3_SUCCESS
   cd $BASE
   for WORKDIR in $(apply_and_glob "%/run/*/*/" "$@"); do
     cd $BASE/$WORKDIR
     echo "# at $WORKDIR"
     eval $(scram runtime -sh)
+
+    # run step 3
     echo -n "# running step3... "
     if nvprof -f -o step3.nvvp -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
+      STEP3_SUCCESS=true
       echo "done"
     else
+      STEP3_SUCCESS=false
       echo "failed"
       tail step3.log
-      # do not attempt to run step4 or profile if step3 failed
-      continue
     fi
-    echo -n "# running step4... "
-    if cmsRun step4.py >& step4.log; then
-      echo "done"
-    else
-      echo "failed"
-      tail step4.log
+
+    # do not attempt to run step4 or profile if step3 failed
+    if $STEP3_SUCCESS; then
+      # run step 4
+      echo -n "# running step4... "
+      if cmsRun step4.py >& step4.log; then
+        echo "done"
+      else
+        echo "failed"
+        tail step4.log
+      fi
+
+      # (optional) run profile
+      if [ -f .has_profiling ]; then
+        echo -n "# running profile... "
+        if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
+          echo "done"
+        else
+          echo "failed"
+          tail profile.log
+        fi
+      fi
     fi
-    [ -f profile.py ] && if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
-      echo "done"
-    else
-      echo "failed"
-      tail profile.log
+
+    # (optional) run cuda-memcheck
+    if [ -f .has_memcheck ]; then
+      # initcheck
+      echo -n "# running cuda-memcheck --tool initcheck... "
+      if cuda-memcheck --tool initcheck --error-exitcode 127 $INITCHECK_OPTS --log-file cuda-initcheck.log -- cmsRun step3.py >& step3-initcheck.log; then
+        echo "done"
+        touch cuda-initcheck.done
+      else
+        echo "failed"
+        tail cuda-initcheck.log
+        touch cuda-initcheck.fail
+      fi
+      # memcheck
+      echo -n "# running cuda-memcheck --tool memcheck... "
+      if cuda-memcheck --tool memcheck --error-exitcode 127 $MEMCHECK_OPTS --log-file cuda-memcheck.log -- cmsRun step3.py >& step3-memcheck.log; then
+        echo "done"
+        touch cuda-memcheck.done
+      else
+        echo "failed"
+        tail cuda-memcheck.log
+        touch cuda-memcheck.fail
+      fi
+      # synccheck
+      echo -n "# running cuda-memcheck --tool synccheck... "
+      if cuda-memcheck --tool synccheck --error-exitcode 127 $SYNCCHECK_OPTS --log-file cuda-synccheck.log -- cmsRun step3.py >& step3-synccheck.log; then
+        echo "done"
+        touch cuda-synccheck.done
+      else
+        echo "failed"
+        tail cuda-synccheck.log
+        touch cuda-synccheck.fail
+      fi
     fi
   done
   cd $BASE
@@ -348,7 +415,7 @@ function make_validation_plots() {
             $FILES
           report "  - tracking validation [plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) and [summary]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/plots_summary.html) for workflow $WORKFLOW"
         else
-          report "  - tracking validation plots and summary for workflow $WORKFLOW are **missing**"
+          report "  - :warning: tracking validation plots and summary for workflow $WORKFLOW are **missing**"
         fi
       fi
     done
@@ -411,7 +478,7 @@ function build_dqm_dataset() {
   local WORKFLOW="$3"
   local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
   local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$DQMFILE
-  local HASH=$(<$BASE/$RELEASE/src/.hash)
+  local HASH=$(<$BASE/$RELEASE/hash)
   [ -f "$FILE" ] && echo "$(echo $DATASET | cut -d/ -f-3)-${HASH}/${WORKFLOW/./_}"
 }
 
@@ -423,7 +490,7 @@ function build_dqm_filename() {
   local DATASET="$2"
   local WORKFLOW="$3"
   local NAME=$(echo $DATASET | cut -d/ -f-3 | sed -e's|/|__|g')
-  local HASH=$(<$BASE/$RELEASE/src/.hash)
+  local HASH=$(<$BASE/$RELEASE/hash)
   echo "DQM_V0001_R000000001${NAME}-${HASH}__${WORKFLOW/./_}.root"
 }
 
@@ -455,7 +522,7 @@ function upload_dqm_plots() {
       ln -s $FILE $DQMGUI_FILEFILE
       report "  - reference [DQM plots]($(build_dqm_link $(build_dqm_dataset $REFERENCE_RELEASE $DATASET $REFERENCE_WORKFLOW))) for $REFERENCE_RELEASE release, workflow $REFERENCE_WORKFLOW"
     else
-      report "  - reference DQM plots for $REFERENCE_RELEASE release, workflow $REFERENCE_WORKFLOW are **missing**"
+      report "  - :warning: reference DQM plots for $REFERENCE_RELEASE release, workflow $REFERENCE_WORKFLOW are **missing**"
     fi
 
     # development releases and workflows
@@ -469,7 +536,7 @@ function upload_dqm_plots() {
           ln -s $FILE $DQMGUI_FILEFILE
           report "  - [DQM plots]($(build_dqm_link $(build_dqm_dataset $RELEASE $DATASET $WORKFLOW))) for $RELEASE release, workflow $WORKFLOW"
         else
-          report "  - DQM plots for $RELEASE release, workflow $WORKFLOW are **missing**"
+          report "  - :warning: DQM plots for $RELEASE release, workflow $WORKFLOW are **missing**"
         fi
       done
     done
@@ -501,6 +568,15 @@ function upload_dqm_plots() {
   done
 }
 
+# If the source file exists, dereference any symlinks amd copy it preserving mode, ownership, and timestamps
+#
+# Usage
+#  copy_if_exists SRC DST
+#
+function copy_if_exists() {
+  [ -f "$1" ] && cp -p -L "$1" "$2" || true
+}
+
 # Upload the output of a validation job
 #
 # Usage
@@ -510,17 +586,21 @@ function upload_artefacts() {
   local RELEASE=$1
   local WORKDIR=$2
   local WORKFLOW=$3
+  local CWD=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW
   report "  - $RELEASE release, workflow $WORKFLOW"
 
-  shift 3
-  for NAME in "$@"; do
-    local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$NAME
+  # check the artefacts to look for and upload
+  NAMES=step3
+  [ -f $CWD/.has_profiling ] && NAMES="$NAMES profile"
+
+  for NAME in $NAMES; do
+    local FILE=$CWD/$NAME
     local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-$NAME
     # upload the python configuration file, log, and nvprof results (if they exist)
-    [ -f ${FILE}.py      ] && cp ${FILE}.py      $UPLOAD_DIR/${PART}.py
-    [ -f ${FILE}.log     ] && cp ${FILE}.log     $UPLOAD_DIR/${PART}.log
-    [ -f ${FILE}.nvvp    ] && cp ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
-    [ -f ${FILE}.profile ] && cp ${FILE}.profile $UPLOAD_DIR/${PART}.profile
+    copy_if_exists ${FILE}.py      $UPLOAD_DIR/${PART}.py
+    copy_if_exists ${FILE}.log     $UPLOAD_DIR/${PART}.log
+    copy_if_exists ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
+    copy_if_exists ${FILE}.profile $UPLOAD_DIR/${PART}.profile
     # update the report
     if ! [ -f ${FILE}.py ]; then
       # the workflow has not been created
@@ -529,7 +609,7 @@ function upload_artefacts() {
     fi
     if ! [ -f ${FILE}.log ]; then
       # if there is no log file, the workflow most likely did not run at all
-      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): log, profile and summary are **missing**, see the full log for more information"
+      report "      - :warning: [${NAME}.py]($UPLOAD_URL/${PART}.py): log, profile and summary are **missing**, see the full log for more information"
       continue
     fi
     # check for both profile and summary
@@ -540,9 +620,50 @@ function upload_artefacts() {
     elif [ -f ${FILE}.profile ]; then
       report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile)"
     else
-      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log); the visual profile and summary are **missing**"
+      report "      - :warning: [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log); the visual profile and summary are **missing**"
     fi
   done
+
+  # check for cuda-memcheck
+  if [ -f $CWD/.has_memcheck ]; then
+    local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW
+    # cuda-memcheck --tool initcheck
+    copy_if_exists $CWD/cuda-initcheck.log  $UPLOAD_DIR/$PART-cuda-initcheck.log
+    copy_if_exists $CWD/step3-initcheck.log $UPLOAD_DIR/$PART-step3-initcheck.log
+    local ERRORS="**some errors**"
+    [ -f $CWD/cuda-initcheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-initcheck.log | cut -d: -f2))**"
+    if [ -f $CWD/cuda-initcheck.done ]; then
+      report "      - :heavy_check_mark: \`cuda-memcheck --tool initcheck $INITCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-initcheck.log), [log]($UPLOAD_URL/$PART-step3-initcheck.log)) did not find any errors"
+    elif [ -f $CWD/cuda-initcheck.fail ]; then
+      report "      - :x: \`cuda-memcheck --tool initcheck $INITCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-initcheck.log), [log]($UPLOAD_URL/$PART-step3-initcheck.log)) found $ERRORS"
+    else
+      report "      - :warning: \`cuda-memcheck --tool initcheck $INITCHECK_OPTS\` did not run"
+    fi
+    # cuda-memcheck --tool memcheck
+    copy_if_exists $CWD/cuda-memcheck.log  $UPLOAD_DIR/$PART-cuda-memcheck.log
+    copy_if_exists $CWD/step3-memcheck.log $UPLOAD_DIR/$PART-step3-memcheck.log
+    local ERRORS="**some errors**"
+    [ -f $CWD/cuda-memcheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-memcheck.log | cut -d: -f2))**"
+    if [ -f $CWD/cuda-memcheck.done ]; then
+      report "      - :heavy_check_mark: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-memcheck.log), [log]($UPLOAD_URL/$PART-step3-memcheck.log)) did not find any errors"
+    elif [ -f $CWD/cuda-memcheck.fail ]; then
+      report "      - :x: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-memcheck.log), [log]($UPLOAD_URL/$PART-step3-memcheck.log)) found $ERRORS"
+    else
+      report "      - :warning: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` did not run"
+    fi
+    # cuda-memcheck --tool synccheck
+    copy_if_exists $CWD/cuda-synccheck.log  $UPLOAD_DIR/$PART-cuda-synccheck.log
+    copy_if_exists $CWD/step3-synccheck.log $UPLOAD_DIR/$PART-step3-synccheck.log
+    local ERRORS="**some errors**"
+    [ -f $CWD/cuda-synccheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-synccheck.log | cut -d: -f2))**"
+    if [ -f $CWD/cuda-synccheck.done ]; then
+      report "      - :heavy_check_mark: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-synccheck.log), [log]($UPLOAD_URL/$PART-step3-synccheck.log)) did not find any errors"
+    elif [ -f $CWD/cuda-synccheck.fail ]; then
+      report "      - :x: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-synccheck.log), [log]($UPLOAD_URL/$PART-step3-synccheck.log)) found $ERRORS"
+    else
+      report "      - :warning: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` did not run"
+    fi
+  fi
 }
 
 # Upload nvprof profiles
@@ -566,22 +687,14 @@ function upload_profiles() {
     local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
 
     # reference release and workflow
-    if has_profiling "$REFERENCE_WORKFLOW"; then
-      upload_artefacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW step3 profile
-    else
-      upload_artefacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW step3
-    fi
+    upload_artefacts $REFERENCE_RELEASE $WORKDIR $REFERENCE_WORKFLOW
 
     # development releases and workflows
     local RELEASE
     for RELEASE in ${TESTING_RELEASES[@]}; do
       local WORKFLOW
       for WORKFLOW in $WORKFLOWS; do
-        if has_profiling "$WORKFLOW"; then
-          upload_artefacts $RELEASE $WORKDIR $WORKFLOW step3 profile
-        else
-          upload_artefacts $RELEASE $WORKDIR $WORKFLOW step3
-        fi
+        upload_artefacts $RELEASE $WORKDIR $WORKFLOW
       done
     done
     report
@@ -611,14 +724,14 @@ echo -e -n '{\n    "body": "' > $JSON
 # set up the reference release
 report "### Validation summary"
 setup_release "reference" CMSSW_10_2_1
-report "Reference release [CMSSW_10_2_1](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_1) at $(< $BASE/reference/src/.hash)"
+report "Reference release [CMSSW_10_2_1](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_1) at $(< $BASE/reference/hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 
 # set up the current development branch
 setup_patatrack_release "development" CMSSW_10_2_1_Patatrack CMSSW_10_2_X_Patatrack
 #setup_development_release "development" CMSSW_10_2_1 CMSSW_10_2_X_Patatrack
-report "Development branch [CMSSW_10_2_X_Patatrack](https://github.com/$REPOSITORY/cmssw/tree/CMSSW_10_2_X_Patatrack) at $(< $BASE/development/src/.hash)"
+report "Development branch [CMSSW_10_2_X_Patatrack](https://github.com/$REPOSITORY/cmssw/tree/CMSSW_10_2_X_Patatrack) at $(< $BASE/development/hash)"
 build_matrix "development" "$WORKFLOWS"
 DIRECTORIES+=" development"
 
@@ -628,9 +741,10 @@ if [ "$*" ]; then
   report "Testing PRs:"
   for PR in "$@"; do
     git cms-merge-topic "$REPOSITORY:$PR"
+    echo $PR >> $BASE/testing/PRs
     report "  - #$PR at $(git rev-parse --short=12 "$REPOSITORY/refs/pull/$PR/head")"
   done
-  git rev-parse --short=12 HEAD > .hash
+  git rev-parse --short=12 HEAD > ../hash
   scram b -j
   build_matrix "testing" "$WORKFLOWS"
   DIRECTORIES+=" testing"
@@ -638,7 +752,8 @@ fi
 report
 
 # compute a unique hash for this validation run
-JOBID=$({ echo $SCRIPTHASH; cat $(apply_and_glob "$BASE/%/src/.hash" $DIRECTORIES); } | sha1sum | cut -d' ' -f1)
+JOBID=$({ echo $SCRIPTHASH; cat $(apply_and_glob "$BASE/%/hash" $DIRECTORIES); } | sha1sum | cut -d' ' -f1)
+echo $JOBID > $BASE/jobid
 
 # run the workflows
 run_workflows $DIRECTORIES
@@ -658,6 +773,8 @@ echo
 cat $REPORT
 
 echo -e '"\n}' >> $JSON
+
+# post the report to GitHub
 if [ "$*" ] && [ -f ~/.patatrack-validation.oauth ]; then
   curl -H "Authorization: token $(< ~/.patatrack-validation.oauth)" -X POST "https://api.github.com/repos/cms-patatrack/cmssw/issues/$1/comments" -d "@$JSON"
 fi
