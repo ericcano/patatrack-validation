@@ -252,6 +252,9 @@ function make_validation_plots() {
 }
 
 # main
+cd $CMSSW_BASE
+rm -rf run/ plots/
+
 build_matrix "$WORKFLOWS"
 # run the workflows
 run_workflows
