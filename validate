@@ -631,7 +631,7 @@ function upload_artefacts() {
     copy_if_exists $CWD/cuda-initcheck.log  $UPLOAD_DIR/$PART-cuda-initcheck.log
     copy_if_exists $CWD/step3-initcheck.log $UPLOAD_DIR/$PART-step3-initcheck.log
     local ERRORS="**some errors**"
-    [ -f $CWD/cuda-initcheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-initcheck.log | cut -d: -f2))**"
+    [ -f $CWD/cuda-initcheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-initcheck.log | cut -d: -f2 | sed -e's/========= No CUDA-MEMCHECK results found/no CUDA-MEMCHECK results/'))**"
     if [ -f $CWD/cuda-initcheck.done ]; then
       report "      - :heavy_check_mark: \`cuda-memcheck --tool initcheck $INITCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-initcheck.log), [log]($UPLOAD_URL/$PART-step3-initcheck.log)) did not find any errors"
     elif [ -f $CWD/cuda-initcheck.fail ]; then
@@ -643,7 +643,7 @@ function upload_artefacts() {
     copy_if_exists $CWD/cuda-memcheck.log  $UPLOAD_DIR/$PART-cuda-memcheck.log
     copy_if_exists $CWD/step3-memcheck.log $UPLOAD_DIR/$PART-step3-memcheck.log
     local ERRORS="**some errors**"
-    [ -f $CWD/cuda-memcheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-memcheck.log | cut -d: -f2))**"
+    [ -f $CWD/cuda-memcheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-memcheck.log | cut -d: -f2 | sed -e's/========= No CUDA-MEMCHECK results found/no CUDA-MEMCHECK results/'))**"
     if [ -f $CWD/cuda-memcheck.done ]; then
       report "      - :heavy_check_mark: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-memcheck.log), [log]($UPLOAD_URL/$PART-step3-memcheck.log)) did not find any errors"
     elif [ -f $CWD/cuda-memcheck.fail ]; then
@@ -655,7 +655,7 @@ function upload_artefacts() {
     copy_if_exists $CWD/cuda-synccheck.log  $UPLOAD_DIR/$PART-cuda-synccheck.log
     copy_if_exists $CWD/step3-synccheck.log $UPLOAD_DIR/$PART-step3-synccheck.log
     local ERRORS="**some errors**"
-    [ -f $CWD/cuda-synccheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-synccheck.log | cut -d: -f2))**"
+    [ -f $CWD/cuda-synccheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-synccheck.log | cut -d: -f2 | sed -e's/========= No CUDA-MEMCHECK results found/no CUDA-MEMCHECK results/'))**"
     if [ -f $CWD/cuda-synccheck.done ]; then
       report "      - :heavy_check_mark: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-synccheck.log), [log]($UPLOAD_URL/$PART-step3-synccheck.log)) did not find any errors"
     elif [ -f $CWD/cuda-synccheck.fail ]; then
