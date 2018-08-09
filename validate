@@ -101,7 +101,7 @@ function setup_release() {
   echo
   # <add here any required pull request or external update>
   #git cms-addpkg HeterogeneousCore
-  #scram b -j
+  #USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
   git rev-parse --short=12 HEAD > ../hash
   echo
 }
@@ -116,7 +116,7 @@ function setup_development_release() {
   git checkout $REPOSITORY/$BRANCH -b $BRANCH
   git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u) || true
   git cms-checkdeps -a
-  scram b -j
+  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
   git rev-parse --short=12 HEAD > ../hash
   if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
     echo "# update $DIRNAME environment on branch $BRANCH with"
@@ -149,7 +149,7 @@ function setup_patatrack_release() {
   git checkout $REPOSITORY/$BRANCH -b $BRANCH
   git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u) || true
   git cms-checkdeps -a
-  scram b -j
+  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
   git rev-parse --short=12 HEAD > ../hash
   if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
     echo "# update $DIRNAME environment on branch $BRANCH with"
@@ -745,7 +745,7 @@ if [ "$*" ]; then
     report "  - #$PR at $(git rev-parse --short=12 "$REPOSITORY/refs/pull/$PR/head")"
   done
   git rev-parse --short=12 HEAD > ../hash
-  scram b -j
+  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
   build_matrix "testing" "$WORKFLOWS"
   DIRECTORIES+=" testing"
 fi
