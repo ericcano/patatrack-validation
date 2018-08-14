@@ -22,8 +22,8 @@ if ! which "jq" > /dev/null; then
   echo "Command \"jq\" not found." 1>&2
   EDIT_COMMENT=false
 fi
-if [ -f ~/.patatrack-validation.oauth ]; then
-  OAUTH_TOKEN=$(< ~/.patatrack-validation.oauth)
+if [ -f $HOME/.patatrack-validation.oauth ]; then
+  OAUTH_TOKEN=$(< $HOME/.patatrack-validation.oauth)
 else
   echo "OAUTH token not found." 1>&2
   POST_COMMENT=false
@@ -73,12 +73,17 @@ TTBAR_CACHE_FILE="F8A80470-5C94-E811-B803-0CC47A78A3EE.root"
 ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_1/RelValZMM_13/GEN-SIM-DIGI-RAW/102X_upgrade2018_realistic_v9_gcc7-v1/10000/"
 ZMUMU_CACHE_FILE="0295ACCE-5094-E811-B051-0CC47A7C3450.root"
 
+# if not set or invalid, set VO_CMS_SW_DIR
+if ! [ "$VO_CMS_SW_DIR" ] || ! [ -d "$VO_CMS_SW_DIR" ] || ! [ -f "$VO_CMS_SW_DIR/cmsset_default.sh" ]; then
+  VO_CMS_SW_DIR=/data/cmssw
+fi
+
 # DQM files produced by step4
 DQMFILE="DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root"
 
 # URL and local area for uploading validation plots, profiles and logs
-UPLOAD_URL="https://fwyzard.web.cern.ch/fwyzard/patatrack/pulls"
-UPLOAD_DIR="/eos/user/f/fwyzard/www/patatrack/pulls"
+UPLOAD_URL="https://${USER}.web.cern.ch/${USER}/patatrack/pulls"
+UPLOAD_DIR="$HOME/www/patatrack/pulls"
 
 # URL of the DQM GUI used to upload files
 DQMGUI_URL="http://dqmgui7.cern.ch:8060/dqm/dev"
@@ -93,7 +98,7 @@ fi
 
 # use locally installed releases
 export SCRAM_ARCH=slc7_amd64_gcc700
-source /data/cmssw/cmsset_default.sh
+source $VO_CMS_SW_DIR/cmsset_default.sh
 
 
 function report() {
