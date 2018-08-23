@@ -513,6 +513,7 @@ function make_validation_plots() {
         done
         if [ "$FILES" ]; then
           makeTrackValidationPlots.py \
+            --extended \
             --html-sample $DATASET \
             --html-validation-name $DATASET \
             --outputDir $UPLOAD_DIR/$JOBID/$WORKDIR/$WORKFLOW \
