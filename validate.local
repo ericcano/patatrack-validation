@@ -243,6 +243,7 @@ function make_validation_plots() {
 
     # validation of all workflows across all releases
     makeTrackValidationPlots.py \
+      --extended \
       --html-sample $DATASET \
       --html-validation-name $DATASET \
       --outputDir plots \
