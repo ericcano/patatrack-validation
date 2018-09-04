@@ -50,7 +50,7 @@ REFERENCE_WORKFLOW="10824.5"
 WORKFLOWS="10824.5 10824.8 10824.7 10824.9"
 PROFILING="10824.5 10824.8"
 MEMCHECKS="10824.8 10824.9"
-GLOBALTAG="102X_upgrade2018_realistic_v9"
+GLOBALTAG="102X_upgrade2018_realistic_v11"
 NUMEVENTS=100
 THREADS=1
 STREAMS=1
@@ -62,16 +62,16 @@ SYNCCHECK_OPTS=""
 
 # datasets used as input for the matrix-like tests
 SAMPLES="TTBAR ZMUMU"
-TTBAR="/RelValTTbar_13/CMSSW_10_2_1-PU25ns_102X_upgrade2018_realistic_v9_gcc7-v1/GEN-SIM-DIGI-RAW"
+TTBAR="/RelValTTbar_13/CMSSW_10_2_2-PU25ns_102X_upgrade2018_realistic_v11-v2/GEN-SIM-DIGI-RAW"
 TTBAR_NUMEVENTS=100
-ZMUMU="/RelValZMM_13/CMSSW_10_2_1-102X_upgrade2018_realistic_v9_gcc7-v1/GEN-SIM-DIGI-RAW"
+ZMUMU="/RelValZMM_13/CMSSW_10_2_2-102X_upgrade2018_realistic_v11-v1/GEN-SIM-DIGI-RAW"
 ZMUMU_NUMEVENTS=200
 
 # optionally, local cache of the input files
-TTBAR_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_1/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_102X_upgrade2018_realistic_v9_gcc7-v1/10000/"
-TTBAR_CACHE_FILE="F8A80470-5C94-E811-B803-0CC47A78A3EE.root"
-ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_1/RelValZMM_13/GEN-SIM-DIGI-RAW/102X_upgrade2018_realistic_v9_gcc7-v1/10000/"
-ZMUMU_CACHE_FILE="0295ACCE-5094-E811-B051-0CC47A7C3450.root"
+TTBAR_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_2/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_102X_upgrade2018_realistic_v11-v2/10000/"
+TTBAR_CACHE_FILE="A0EB6ADB-7E9C-E811-A746-0CC47A4D760C.root"
+ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_2_2/RelValZMM_13/GEN-SIM-DIGI-RAW/102X_upgrade2018_realistic_v11-v1/10000/"
+ZMUMU_CACHE_FILE="EEAF899F-439C-E811-A333-0CC47A4C8E1C.root"
 
 # if not set or invalid, set VO_CMS_SW_DIR
 if ! [ "$VO_CMS_SW_DIR" ] || ! [ -d "$VO_CMS_SW_DIR" ] || ! [ -f "$VO_CMS_SW_DIR/cmsset_default.sh" ]; then
