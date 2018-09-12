@@ -58,7 +58,6 @@ function build_matrix() {
   local SAMPLE DATASET WORKDIR CACHE_PATH CACHE_FILE INPUT MY_GLOBALTAG MY_NUMEVENTS WORKFLOW STEP3 STEP4
   # create the matrix-like workflows for the various samples
   cd $CMSSW_BASE
-  eval $(scram runtime -sh)
   for SAMPLE in $SAMPLES; do
     DATASET=${!SAMPLE}
     WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
@@ -138,83 +137,93 @@ process.MessageLogger.categories.append("CUDAService")\
   done
 }
 
-function run_workflows() {
-  local WORKDIR
+function run_workflow() {
+  local WORKDIR=$1
   local STEP3_SUCCESS
-  cd $CMSSW_BASE
-  for WORKDIR in run/*/*/; do
-    cd $CMSSW_BASE/$WORKDIR
-    echo "# at $WORKDIR"
-    eval $(scram runtime -sh)
 
-    # run step 3
-    echo -n "# running step3... "
-    if nvprof -f -o step3.nvvp -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
-      STEP3_SUCCESS=true
+  cd $CMSSW_BASE/$WORKDIR
+  echo "# at $WORKDIR"
+
+  # run step 3
+  echo -n "# running step3... "
+  if nvprof -f -o step3.nvvp -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
+    STEP3_SUCCESS=true
+    echo "done"
+  else
+    STEP3_SUCCESS=false
+    echo "failed"
+    tail step3.log
+  fi
+
+  # do not attempt to run step4 or profile if step3 failed
+  if $STEP3_SUCCESS; then
+    # run step 4
+    echo -n "# running step4... "
+    if cmsRun step4.py >& step4.log; then
       echo "done"
     else
-      STEP3_SUCCESS=false
       echo "failed"
-      tail step3.log
+      tail step4.log
     fi
 
-    # do not attempt to run step4 or profile if step3 failed
-    if $STEP3_SUCCESS; then
-      # run step 4
-      echo -n "# running step4... "
-      if cmsRun step4.py >& step4.log; then
+    # (optional) run profile
+    if [ -f .has_profiling ]; then
+      echo -n "# running profile... "
+      if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
         echo "done"
       else
         echo "failed"
-        tail step4.log
-      fi
-
-      # (optional) run profile
-      if [ -f .has_profiling ]; then
-        echo -n "# running profile... "
-        if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
-          echo "done"
-        else
-          echo "failed"
-          tail profile.log
-        fi
+        tail profile.log
       fi
     fi
+  fi
 
-    # (optional) run cuda-memcheck
-    if [ -f .has_memcheck ]; then
-      # initcheck
-      echo -n "# running cuda-memcheck --tool initcheck... "
-      if cuda-memcheck --tool initcheck --error-exitcode 127 $INITCHECK_OPTS --log-file cuda-initcheck.log -- cmsRun step3.py >& step3-initcheck.log; then
-        echo "done"
-        touch cuda-initcheck.done
-      else
-        echo "failed"
-        tail cuda-initcheck.log
-        touch cuda-initcheck.fail
-      fi
-      # memcheck
-      echo -n "# running cuda-memcheck --tool memcheck... "
-      if cuda-memcheck --tool memcheck --error-exitcode 127 $MEMCHECK_OPTS --log-file cuda-memcheck.log -- cmsRun step3.py >& step3-memcheck.log; then
-        echo "done"
-        touch cuda-memcheck.done
-      else
-        echo "failed"
-        tail cuda-memcheck.log
-        touch cuda-memcheck.fail
-      fi
-      # synccheck
-      echo -n "# running cuda-memcheck --tool synccheck... "
-      if cuda-memcheck --tool synccheck --error-exitcode 127 $SYNCCHECK_OPTS --log-file cuda-synccheck.log -- cmsRun step3.py >& step3-synccheck.log; then
-        echo "done"
-        touch cuda-synccheck.done
-      else
-        echo "failed"
-        tail cuda-synccheck.log
-        touch cuda-synccheck.fail
-      fi
+  # (optional) run cuda-memcheck
+  if [ -f .has_memcheck ]; then
+    # initcheck
+    echo -n "# running cuda-memcheck --tool initcheck... "
+    if cuda-memcheck --tool initcheck --error-exitcode 127 $INITCHECK_OPTS --log-file cuda-initcheck.log -- cmsRun step3.py >& step3-initcheck.log; then
+      echo "done"
+      touch cuda-initcheck.done
+    else
+      echo "failed"
+      tail cuda-initcheck.log
+      touch cuda-initcheck.fail
     fi
+    # memcheck
+    echo -n "# running cuda-memcheck --tool memcheck... "
+    if cuda-memcheck --tool memcheck --error-exitcode 127 $MEMCHECK_OPTS --log-file cuda-memcheck.log -- cmsRun step3.py >& step3-memcheck.log; then
+      echo "done"
+      touch cuda-memcheck.done
+    else
+      echo "failed"
+      tail cuda-memcheck.log
+      touch cuda-memcheck.fail
+    fi
+    # synccheck
+    echo -n "# running cuda-memcheck --tool synccheck... "
+    if cuda-memcheck --tool synccheck --error-exitcode 127 $SYNCCHECK_OPTS --log-file cuda-synccheck.log -- cmsRun step3.py >& step3-synccheck.log; then
+      echo "done"
+      touch cuda-synccheck.done
+    else
+      echo "failed"
+      tail cuda-synccheck.log
+      touch cuda-synccheck.fail
+    fi
+  fi
+}
+
+function run_workflows() {
+  local WORKDIR
+  local MAXJOBS=4
+
+  cd $CMSSW_BASE
+  for WORKDIR in run/*/*/; do
+    # run up to MAXJOBS in parallel
+    while (( $(jobs | wc -l) > $MAXJOBS )); do sleep 1; done
+    run_workflow $WORKDIR &
   done
+  wait
 }
 
 # Make validation plots, based on the DQM output of step4 and makeTrackValidationPlots.py
