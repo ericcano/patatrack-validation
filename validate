@@ -418,6 +418,7 @@ function run_workflow() {
     # initcheck
     echo -n "# running cuda-memcheck --tool initcheck... "
     if cuda-memcheck --tool initcheck --error-exitcode 127 $INITCHECK_OPTS --log-file cuda-initcheck.log -- cmsRun step3.py >& step3-initcheck.log; then
+      [ -f step3-initcheck.log ] && cat step3-initcheck.log | c++filt -i > demangled && mv demangled step3-initcheck.log
       echo "done"
       touch cuda-initcheck.done
     else
@@ -428,6 +429,7 @@ function run_workflow() {
     # memcheck
     echo -n "# running cuda-memcheck --tool memcheck... "
     if cuda-memcheck --tool memcheck --error-exitcode 127 $MEMCHECK_OPTS --log-file cuda-memcheck.log -- cmsRun step3.py >& step3-memcheck.log; then
+      [ -f step3-memcheck.log ] && cat step3-memcheck.log | c++filt -i > demangled && mv demangled step3-memcheck.log
       echo "done"
       touch cuda-memcheck.done
     else
@@ -438,6 +440,7 @@ function run_workflow() {
     # synccheck
     echo -n "# running cuda-memcheck --tool synccheck... "
     if cuda-memcheck --tool synccheck --error-exitcode 127 $SYNCCHECK_OPTS --log-file cuda-synccheck.log -- cmsRun step3.py >& step3-synccheck.log; then
+      [ -f step3-synccheck.log ] && cat step3-synccheck.log | c++filt -i > demangled && mv demangled step3-synccheck.log
       echo "done"
       touch cuda-synccheck.done
     else
