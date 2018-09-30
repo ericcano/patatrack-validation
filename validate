@@ -463,7 +463,7 @@ function run_workflows() {
   cd $BASE
   for WORKDIR in $(apply_and_glob "%/run/*/*/" "$@"); do
     # run up to MAXJOBS in parallel
-    while (( $(jobs | wc -l) > $MAXJOBS )); do sleep 1; done
+    while (( $(jobs | wc -l) >= $MAXJOBS )); do sleep 1; done
     run_workflow $WORKDIR &
   done
   wait

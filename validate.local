@@ -226,7 +226,7 @@ function run_workflows() {
   cd $CMSSW_BASE
   for WORKDIR in run/*/*/; do
     # run up to MAXJOBS in parallel
-    while (( $(jobs | wc -l) > $MAXJOBS )); do sleep 1; done
+    while (( $(jobs | wc -l) >= $MAXJOBS )); do sleep 1; done
     run_workflow $WORKDIR &
   done
   wait
