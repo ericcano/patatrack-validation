@@ -127,8 +127,11 @@ process.MessageLogger.categories.append("CUDAService")\
       fi
 
       if has_memcheck $WORKFLOW; then
-        # mark the workflow to run the various cuda-memcheck checks
-        touch .has_memcheck
+        # prepare the workflow to run the various cuda-memcheck checks
+        cp step3.py memcheck.py
+        echo >> memcheck.py
+        echo '# limit he number of events for cuda-memcheck' >> memcheck.py
+        echo 'process.maxEvents.input = 10' >> memcheck.py
       fi
 
       cd ..
@@ -179,7 +182,7 @@ function run_workflow() {
   fi
 
   # (optional) run cuda-memcheck
-  if [ -f .has_memcheck ]; then
+  if [ -f memcheck.py ]; then
     # initcheck
     echo -n "# running cuda-memcheck --tool initcheck... "
     if cuda-memcheck --tool initcheck --error-exitcode 127 $INITCHECK_OPTS --log-file cuda-initcheck.log -- cmsRun step3.py >& step3-initcheck.log; then
