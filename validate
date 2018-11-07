@@ -853,15 +853,15 @@ can_post_comment && $EDIT_COMMENT && upload_report
 
 # set up the reference release
 report "### Validation summary"
-setup_release "reference" CMSSW_10_2_5
-report "Reference release [CMSSW_10_2_5](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_5) at $(< $BASE/reference/hash)"
+setup_release "reference" CMSSW_10_2_6
+report "Reference release [CMSSW_10_2_6](https://github.com/cms-sw/cmssw/tree/CMSSW_10_2_6) at $(< $BASE/reference/hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 upload_report
 
 # set up the current development branch
-setup_patatrack_release "development" CMSSW_10_2_5_Patatrack CMSSW_10_2_X_Patatrack
-#setup_development_release "development" CMSSW_10_2_5 CMSSW_10_2_X_Patatrack
+setup_patatrack_release "development" CMSSW_10_2_6_Patatrack CMSSW_10_2_X_Patatrack
+#setup_development_release "development" CMSSW_10_2_6 CMSSW_10_2_X_Patatrack
 report "Development branch [CMSSW_10_2_X_Patatrack](https://github.com/$REPOSITORY/cmssw/tree/CMSSW_10_2_X_Patatrack) at $(< $BASE/development/hash)"
 build_matrix "development" "$WORKFLOWS"
 DIRECTORIES+=" development"
