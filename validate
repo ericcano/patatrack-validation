@@ -8,32 +8,7 @@
 # Note: this script relies on `visDQMUpload` and `visDQMUtils.py` being available in the same directory.
 # If they are missing they are automatically downloaded from https://github.com/rovere/dqmgui/ .
 
-# check if we are able to post comments on GitHub
-POST_COMMENT=true
-EDIT_COMMENT=true
-OAUTH_TOKEN=
-ISSUE_NUMBER=
-COMMENT_ID=
-if ! which "curl" > /dev/null; then
-  echo "Command \"curl\" not found." 1>&2
-  POST_COMMENT=false
-fi
-if ! which "jq" > /dev/null; then
-  echo "Command \"jq\" not found." 1>&2
-  EDIT_COMMENT=false
-fi
-if [ -f $HOME/.patatrack-validation.oauth ]; then
-  OAUTH_TOKEN=$(< $HOME/.patatrack-validation.oauth)
-else
-  echo "OAUTH token not found." 1>&2
-  POST_COMMENT=false
-fi
-[ $POST_COMMENT ] || echo "The report will not be posted to GitHub." 1>&2
-[ $POST_COMMENT ] && [ $EDIT_COMMENT ] || "Only the final report will be posted to GitHub." 1>&2
-
-# hash of this script
-SCRIPTHASH=$(sha1sum ${BASH_SOURCE[0]} | cut -d' ' -f1)
-
+# Create a temporay working directory
 BASE=$(mktemp -d -p $PWD run.XXXXXXXXXX)
 [ -d $BASE ] || exit 1
 REPORT=$BASE/report.md
@@ -42,146 +17,31 @@ REPORT=$BASE/report.md
 exec 3>&1 4>&2
 exec &> $BASE/log
 
-# repository with the working branch and pull requests
-REPOSITORY=cms-patatrack
+# Local configuration - should go before the others
+source local.sh
 
-# matrix workflows, default global tag and number of events
-REFERENCE_WORKFLOW="10824.5"
-WORKFLOWS="10824.5 10824.8 10824.7 10824.9"
-PROFILING="10824.5 10824.8 10824.7 10824.9"
-MEMCHECKS="10824.8 10824.9"
-GLOBALTAG="103X_upgrade2018_realistic_v8"
-NUMEVENTS=100
-THREADS=1
-STREAMS=1
+# CMSSW configuration
+source cmssw.sh
+
+# DQM configuration
+source dqm.sh
+
+# GitHub-related configuration
+source github.sh
+
+# Input samples configuration
+source input.sh
+
+# Hash of this script and its configuration
+SCRIPTHASH=$(cat $(dirname ${BASH_SOURCE[0]})/config*.sh ${BASH_SOURCE[0]} | sha1sum | cut -d' ' -f1)
 
 # cuda-memcheck tools options
 INITCHECK_OPTS="--track-unused-memory no"
 MEMCHECK_OPTS="--leak-check full --report-api-errors all"
 SYNCCHECK_OPTS=""
 
-# datasets used as input for the matrix-like tests
-SAMPLES="TTBAR ZMUMU"
-TTBAR="/RelValTTbar_13/CMSSW_10_4_0_pre2-PU25ns_103X_upgrade2018_realistic_v8-v1/GEN-SIM-DIGI-RAW"
-TTBAR_NUMEVENTS=100
-ZMUMU="/RelValZMM_13/CMSSW_10_4_0_pre2-103X_upgrade2018_realistic_v8-v1/GEN-SIM-DIGI-RAW"
-ZMUMU_NUMEVENTS=200
-
-# optionally, local cache of the input files
-TTBAR_CACHE_PATH="file:/data/store/relval/CMSSW_10_4_0_pre2/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_103X_upgrade2018_realistic_v8-v1/10000"
-TTBAR_CACHE_FILE="29C415A1-48E9-8445-A19C-49B84D1505ED.root"
-ZMUMU_CACHE_PATH="file:/data/store/relval/CMSSW_10_4_0_pre2/RelValZMM_13/GEN-SIM-DIGI-RAW/103X_upgrade2018_realistic_v8-v1/10000"
-ZMUMU_CACHE_FILE="2AB9A860-9F4D-3F40-9346-DDD02622A716.root"
-
-# if not set or invalid, set VO_CMS_SW_DIR
-if ! [ "$VO_CMS_SW_DIR" ] || ! [ -d "$VO_CMS_SW_DIR" ] || ! [ -f "$VO_CMS_SW_DIR/cmsset_default.sh" ]; then
-  VO_CMS_SW_DIR=/data/cmssw
-fi
-
-# DQM files produced by step4
-DQMFILE="DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root"
-
-# URL and local area for uploading validation plots, profiles and logs
-UPLOAD_URL="https://${USER}.web.cern.ch/${USER}/patatrack/pulls"
-UPLOAD_DIR="$HOME/www/patatrack/pulls"
-
-# URL of the DQM GUI used to upload files
-DQMGUI_URL="http://dqmgui7.cern.ch:8060/dqm/dev"
-
-# full path to visDQMUpload
-DQMGUI_UPLOAD=$(dirname $(readlink -f ${BASH_SOURCE[0]}))/visDQMUpload
-if ! [ -x $DQMGUI_UPLOAD ]; then
-  DQMGUIREPO="https://raw.githubusercontent.com/rovere/dqmgui/index128"
-  wget -q "$DQMGUIREPO/bin/visDQMUpload" "$DQMGUIREPO/src/python/DQM/visDQMUtils.py" -nd -P $(dirname $DQMGUI_UPLOAD)/
-  chmod +x $DQMGUI_UPLOAD
-fi
-
-# use locally installed releases
-export SCRAM_ARCH=slc7_amd64_gcc700
-source $VO_CMS_SW_DIR/cmsset_default.sh
-
-
 function report() {
   echo "$@" >> $REPORT
-}
-
-function can_post_comment() {
-  $POST_COMMENT && [ "$ISSUE_NUMBER" ]
-}
-
-function can_update_comment() {
-  can_post_comment && $EDIT_COMMENT && [ "$COMMENT_ID" ]
-}
-
-# Post a comment to a GitHub issue
-#
-# Usage:
-#   post_comment BODY
-#
-# Any format accepted by curl is valid for BODY. For example,
-# the format "@FILE" will use the content of FILE.
-#
-function post_comment() {
-  can_post_comment || return
-  local BODY="$1"       # body of the message, wrapped in JSON format (see https://developer.github.com/v3/issues/comments/ )
-  local RESPONSE
-  if ! RESPONSE=$(curl -s -S -H "Authorization: token $OAUTH_TOKEN" -X "POST" "https://api.github.com/repos/cms-patatrack/cmssw/issues/$ISSUE_NUMBER/comments" -d "$BODY"); then
-    # failed; disable further posting
-    POST_COMMENT=false
-    EDIT_COMMENT=false
-  elif $EDIT_COMMENT; then
-    # success; set the comment id for further editin
-    COMMENT_ID=$(echo "$RESPONSE" | jq ".id")
-  fi
-}
-
-# Update a comment on a GitHub issue
-#
-# Usage:
-#   update_comment BODY
-#
-# Any format accepted by curl is valid for BODY. For example,
-# the format "@FILE" will use the content of FILE.
-#
-function update_comment() {
-  can_update_comment || return
-  local BODY="$1"       # body of the message, wrapped in JSON format (see https://developer.github.com/v3/issues/comments/ )
-  local RESPONSE
-  if ! RESPONSE=$(curl -s -S -H "Authorization: token $OAUTH_TOKEN" -X "PATCH" "https://api.github.com/repos/cms-patatrack/cmssw/issues/comments/$COMMENT_ID" -d "$BODY"); then
-    # failed; disable further posting
-    POST_COMMENT=false
-    EDIT_COMMENT=false
-  fi
-}
-
-function upload_final_report() {
-  local JSON=$(mktemp -p $BASE report.XXXXXXXXXX.json)
-  {
-    echo -e -n '{\n    "body": "'
-    cat $BASE/report.md | tr '\n' '\r' | sed -e's/\r/\\r\\n/g' -e's/"/\\"/g'
-    echo -e '"\n}'
-  } > $JSON
-  if can_update_comment; then
-    update_comment "@$JSON"
-  elif can_post_comment; then
-    post_comment "@$JSON"
-  fi
-  #rm -f $JSON
-}
-
-function upload_report() {
-  local JSON=$(mktemp -p $BASE report.XXXXXXXXXX.json)
-  {
-    echo -e -n '{\n    "body": "'
-    cat $BASE/report.md | tr '\n' '\r' | sed -e's/\r/\\r\\n/g' -e's/"/\\"/g'
-    echo -e "\\\r\\\n\\\r\\\n:construction: Validation running at $(hostname):$BASE ...\"\n}"
-  } > $JSON
-  if can_update_comment; then
-    update_comment "@$JSON"
-  elif can_post_comment; then
-    post_comment "@$JSON"
-  fi
-  #rm -f $JSON
 }
 
 function apply() {
@@ -191,87 +51,6 @@ function apply() {
 
 function apply_and_glob() {
   echo $(apply "$@")
-}
-
-function setup_release() {
-  local DIRNAME="$1"
-  local RELEASE="$2"
-  # set up the reference area
-  cd $BASE
-  echo "# set up $DIRNAME environment for release $RELEASE"
-  scram project -n $DIRNAME CMSSW $RELEASE
-  cd $DIRNAME/src
-  eval $(scram runtime -sh)
-  git cms-init --upstream-only
-  echo
-  # <add here any required pull request or external update>
-  #git cms-addpkg HeterogeneousCore
-  #USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
-  git rev-parse --short=12 HEAD > ../hash
-  echo
-}
-
-function setup_development_release() {
-  local DIRNAME="$1"
-  local RELEASE="$2"
-  local BRANCH="$3"
-  setup_release $DIRNAME $RELEASE
-  # <add here any required pull request or external update>
-  git cms-remote add $REPOSITORY
-  git checkout $REPOSITORY/$BRANCH -b $BRANCH
-  git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u) || true
-  git cms-checkdeps -a
-  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
-  git rev-parse --short=12 HEAD > ../hash
-  if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
-    echo "# update $DIRNAME environment on branch $BRANCH with"
-    git log --oneline --reverse --no-decorate ${RELEASE}..
-  fi
-  echo
-}
-
-function setup_patatrack_release() {
-  local DIRNAME="$1"
-  local RELEASE="$2"
-  local BRANCH="$3"
-  # set up the reference area
-  cd "$BASE"
-  echo "# set up $DIRNAME environment for release $RELEASE"
-  scram project -n $DIRNAME CMSSW $RELEASE
-  cd $DIRNAME/src
-  eval $(scram runtime -sh)
-  # git needs some special care
-  git cms-init --upstream-only || true
-  git config core.sparsecheckout true
-  {
-    echo "/.gitignore"
-    echo "/.clang-tidy"
-    echo "/.clang-format"
-  } > $CMSSW_BASE/src/.git/info/sparse-checkout
-  git read-tree -mu HEAD
-  # <add here any required pull request or external update>
-  git cms-remote add $REPOSITORY
-  git checkout $REPOSITORY/$BRANCH -b $BRANCH
-  git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u) || true
-  git cms-checkdeps -a
-  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
-  git rev-parse --short=12 HEAD > ../hash
-  if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
-    echo "# update $DIRNAME environment on branch $BRANCH with"
-    git log --oneline --reverse --no-decorate ${RELEASE}..
-  fi
-  echo
-}
-
-function clone_release() {
-  local SOURCE="$1"
-  local TARGET="$2"
-  cd "$BASE"
-  cp -ar "$SOURCE" "$TARGET"
-  cd "$TARGET"/src
-  scram b ProjectRename
-  eval $(scram runtime -sh)
-  echo
 }
 
 function has_profiling() {
@@ -457,10 +236,19 @@ function run_workflow() {
 }
 
 function run_workflows() {
-  local WORKDIR
-  local MAXJOBS=4
-
   cd $BASE
+
+  local WORKDIR
+  for WORKDIR in $(apply_and_glob "%/run/*/*/" "$@"); do
+    run_workflow $WORKDIR
+  done
+}
+
+function run_workflows_in_parallel() {
+  local MAXJOBS=$(($1))
+  cd $BASE
+
+  local WORKDIR
   for WORKDIR in $(apply_and_glob "%/run/*/*/" "$@"); do
     # run up to MAXJOBS in parallel
     while (( $(jobs | wc -l) >= $MAXJOBS )); do sleep 1; done
@@ -545,151 +333,6 @@ function make_validation_plots() {
       fi
     done
     report
-  done
-}
-
-# Build a link to the DQM GUI showing one or more test results
-#
-# Usage:
-#   build_dqm_link REFERENCE_DATASET [DATASET ...]
-#
-function build_dqm_link() {
-  [ "$1" ] || return
-  local URL="$DQMGUI_URL/start?runnr=1;"
-  URL+="dataset=$1;"
-  URL+="sampletype=offline_relval;"
-  URL+="filter=all;"
-  URL+="referencepos=ratiooverlay;"
-  URL+="referenceshow=all;"
-  URL+="referencenorm=False;"
-  if [ "$2" ]; then
-    URL+="referenceobj1=other%3A%3A$2%3A;"
-  else
-    URL+="referenceobj1=none;"
-  fi
-  if [ "$3" ]; then
-    URL+="referenceobj2=other%3A%3A$3%3A;"
-  else
-    URL+="referenceobj2=none;"
-  fi
-  if [ "$4" ]; then
-    URL+="referenceobj3=other%3A%3A$4%3A;"
-  else
-    URL+="referenceobj3=none;"
-  fi
-  if [ "$5" ]; then
-    URL+="referenceobj4=other%3A%3A$5%3A;"
-  else
-    URL+="referenceobj4=none;"
-  fi
-  URL+="search=;"
-  URL+="striptype=object;"
-  URL+="stripruns=;"
-  URL+="stripaxis=run;"
-  URL+="stripomit=none;"
-  URL+="workspace=Everything;"
-  URL+="size=L;"
-  URL+="root=Tracking;"
-  URL+="focus=;"
-  URL+="zoom=no;"
-  echo "$URL"
-}
-
-# Usage:
-#   build_dqm_dataset RELEASE DATASET WORKFLOW
-function build_dqm_dataset() {
-  local RELEASE="$1"
-  local DATASET="$2"
-  local WORKFLOW="$3"
-  local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
-  local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$DQMFILE
-  local HASH=$(<$BASE/$RELEASE/hash)
-  [ -f "$FILE" ] && echo "$(echo $DATASET | cut -d/ -f-3)-${HASH}/${WORKFLOW/./_}"
-}
-
-
-# Usage:
-#   build_dqm_filename RELEASE DATASET WORKFLOW
-function build_dqm_filename() {
-  local RELEASE="$1"
-  local DATASET="$2"
-  local WORKFLOW="$3"
-  local NAME=$(echo $DATASET | cut -d/ -f-3 | sed -e's|/|__|g')
-  local HASH=$(<$BASE/$RELEASE/hash)
-  echo "DQM_V0001_R000000001${NAME}-${HASH}__${WORKFLOW/./_}.root"
-}
-
-
-# Upload DQM plots to the GUI.
-#
-# Usage:
-#   upload_dqm_plots REFERENCE_RELEASE [[RELEASE ...] TARGET_RELEASE]
-#
-function upload_dqm_plots() {
-  [ "$1" ] || return 1
-  local REFERENCE_RELEASE="$1"; shift
-  local RELEASES=("$@")
-
-  report "### DQM GUI plots"
-
-  local SAMPLE
-  for SAMPLE in $SAMPLES; do
-    local DATASET=${!SAMPLE}
-    report "#### $DATASET"
-    local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
-    mkdir -p $BASE/dqm/$WORKDIR
-    cd $BASE/dqm/$WORKDIR
-
-    # reference release and workflow
-    local DQMGUI_FILEFILE=$(build_dqm_filename $REFERENCE_RELEASE $DATASET $REFERENCE_WORKFLOW)
-    local FILE=$BASE/$REFERENCE_RELEASE/run/$WORKDIR/$REFERENCE_WORKFLOW/$DQMFILE
-    if [ -f $FILE ]; then
-      ln -s $FILE $DQMGUI_FILEFILE
-      report "  - reference [DQM plots]($(build_dqm_link $(build_dqm_dataset $REFERENCE_RELEASE $DATASET $REFERENCE_WORKFLOW))) for $REFERENCE_RELEASE release, workflow $REFERENCE_WORKFLOW"
-    else
-      report "  - :warning: reference DQM plots for $REFERENCE_RELEASE release, workflow $REFERENCE_WORKFLOW are **missing**"
-    fi
-
-    # development releases and workflows
-    local RELEASE
-    for RELEASE in ${RELEASES[@]}; do
-      local WORKFLOW
-      for WORKFLOW in $WORKFLOWS; do
-        local DQMGUI_FILEFILE=$(build_dqm_filename $RELEASE $DATASET $WORKFLOW)
-        local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$DQMFILE
-        if [ -f $FILE ]; then
-          ln -s $FILE $DQMGUI_FILEFILE
-          report "  - [DQM plots]($(build_dqm_link $(build_dqm_dataset $RELEASE $DATASET $WORKFLOW))) for $RELEASE release, workflow $WORKFLOW"
-        else
-          report "  - :warning: DQM plots for $RELEASE release, workflow $WORKFLOW are **missing**"
-        fi
-      done
-    done
-
-    # upload all DQM files in the background
-    $DQMGUI_UPLOAD $DQMGUI_URL DQM_*.root >& upload.log &
-
-    # DQM-based validation of all workflows across all releases
-    local WORKFLOW
-    for WORKFLOW in $WORKFLOWS; do
-      if [ "$WORKFLOW" == "$REFERENCE_WORKFLOW" ]; then
-        # reference workflow
-        local LINK=$(build_dqm_link \
-          $(for RELEASE in ${REFERENCE_RELEASE} ${RELEASES[@]}; do build_dqm_dataset $RELEASE $DATASET $WORKFLOW; done) \
-        )
-        report "  - [DQM comparison]($LINK) for reference workflow $WORKFLOW"
-      else
-        # other workflows
-        [ "${RELEASES[0]}" ] || continue
-        local LINK=$(build_dqm_link \
-          $(build_dqm_dataset ${RELEASES[0]} $DATASET $REFERENCE_WORKFLOW) \
-          $(for RELEASE in ${RELEASES[@]}; do build_dqm_dataset $RELEASE $DATASET $WORKFLOW; done) \
-        )
-        report "  - [DQM comparison]($LINK) for workflow $WORKFLOW"
-      fi
-    done
-    report
-
   done
 }
 
@@ -849,7 +492,7 @@ echo > $REPORT
 for ISSUE_NUMBER in "$@"; do true; done
 
 # if we can edit the comment after posting it, create an empty comment as a starting point
-can_post_comment && $EDIT_COMMENT && upload_report
+COMMENT_ID=$(can_post_comment $ISSUE_NUMBER && $EDIT_COMMENT && upload_report $ISSUE_NUMBER)
 
 # set up the reference release
 report "### Validation summary"
@@ -857,15 +500,14 @@ setup_release "reference" CMSSW_10_4_0_pre2
 report "Reference release [CMSSW_10_4_0_pre2](https://github.com/cms-sw/cmssw/tree/CMSSW_10_4_0_pre2) at $(< $BASE/reference/hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
-upload_report
+upload_report $ISSUE_NUMBER $COMMENT_ID
 
 # set up the current development branch
-setup_patatrack_release "development" CMSSW_10_4_0_pre2_Patatrack CMSSW_10_4_X_Patatrack
-#setup_development_release "development" CMSSW_10_4_0_pre2 CMSSW_10_4_X_Patatrack
+setup_development_release "development" CMSSW_10_4_0_pre2_Patatrack CMSSW_10_4_X_Patatrack $REPOSITORY
 report "Development branch [CMSSW_10_4_X_Patatrack](https://github.com/$REPOSITORY/cmssw/tree/CMSSW_10_4_X_Patatrack) at $(< $BASE/development/hash)"
 build_matrix "development" "$WORKFLOWS"
 DIRECTORIES+=" development"
-upload_report
+upload_report $ISSUE_NUMBER $COMMENT_ID
 
 # set up the development branch plus the PR(s) to be tested
 if [ "$*" ]; then
@@ -882,7 +524,7 @@ if [ "$*" ]; then
   DIRECTORIES+=" testing"
 fi
 report
-upload_report
+upload_report $ISSUE_NUMBER $COMMENT_ID
 
 # compute a unique hash for this validation run
 JOBID=$({ echo $SCRIPTHASH; cat $(apply_and_glob "$BASE/%/hash" $DIRECTORIES); } | sha1sum | cut -d' ' -f1)
@@ -890,16 +532,16 @@ echo $JOBID > $BASE/jobid
 
 # run the workflows
 run_workflows $DIRECTORIES
-upload_report
+upload_report $ISSUE_NUMBER $COMMENT_ID
 # make validation plots
 make_validation_plots $DIRECTORIES
-upload_report
+upload_report $ISSUE_NUMBER $COMMENT_ID
 # upload DQM plots to the GUI
-upload_dqm_plots $DIRECTORIES
-upload_report
+#upload_dqm_plots $DIRECTORIES
+#upload_report $ISSUE_NUMBER $COMMENT_ID
 # upload nvprof profiles
 upload_profiles $DIRECTORIES
-upload_report
+upload_report $ISSUE_NUMBER $COMMENT_ID
 
 # restore the original descriptors, close and upload the log files
 exec 1>&3- 2>&4-
@@ -910,4 +552,4 @@ echo
 cat $REPORT
 
 # post the report to GitHub
-upload_final_report
+upload_final_report $ISSUE_NUMBER $COMMENT_ID
