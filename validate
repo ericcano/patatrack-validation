@@ -492,18 +492,18 @@ echo > $REPORT
 for ISSUE_NUMBER in "$@"; do true; done
 
 # if we can edit the comment after posting it, create an empty comment as a starting point
-COMMENT_ID=$(can_post_comment $ISSUE_NUMBER && $EDIT_COMMENT && upload_report $ISSUE_NUMBER)
+COMMENT_ID=$(can_post_comment $ISSUE_NUMBER && $EDIT_COMMENT && upload_report $ISSUE_NUMBER) || true
 
 # set up the reference release
 report "### Validation summary"
-setup_release "reference" CMSSW_10_4_0_pre3
-report "Reference release [CMSSW_10_4_0_pre3](https://github.com/cms-sw/cmssw/tree/CMSSW_10_4_0_pre3) at $(< $BASE/reference/hash)"
+setup_release "reference" CMSSW_10_4_0_pre4
+report "Reference release [CMSSW_10_4_0_pre4](https://github.com/cms-sw/cmssw/tree/CMSSW_10_4_0_pre4) at $(< $BASE/reference/hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 upload_report $ISSUE_NUMBER $COMMENT_ID
 
 # set up the current development branch
-setup_development_release "development" CMSSW_10_4_0_pre3_Patatrack CMSSW_10_4_X_Patatrack $REPOSITORY
+setup_development_release "development" CMSSW_10_4_0_pre4_Patatrack CMSSW_10_4_X_Patatrack $REPOSITORY
 report "Development branch [CMSSW_10_4_X_Patatrack](https://github.com/$REPOSITORY/cmssw/tree/CMSSW_10_4_X_Patatrack) at $(< $BASE/development/hash)"
 build_matrix "development" "$WORKFLOWS"
 DIRECTORIES+=" development"
