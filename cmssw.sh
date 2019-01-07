@@ -18,6 +18,9 @@ MEMCHECKS="10824.8 10824.9"
 # Default number of events
 NUMEVENTS=100
 
+# Number of events for the memcheck workflows
+MEMCHECK_NUMEVENTS=10
+
 
 function setup_release() {
   local DIRNAME="$1"

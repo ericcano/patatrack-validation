@@ -197,6 +197,11 @@ function run_workflow() {
 
   # (optional) run cuda-memcheck
   if [ -f memcheck.py ]; then
+    # set the number of events for the memcheck workflows
+    if (( MEMCHECK_NUMEVENTS )); then
+      echo -e "\n# set the number of events for the memcheck workflows\nprocess.maxEvents = cms.untracked.PSet(\n    input = cms.untracked.int32($MEMCHECK_NUMEVENTS)\n)" >> step3.py
+    fi
+
     # initcheck
     echo -n "# running cuda-memcheck --tool initcheck... "
     if cuda-memcheck --tool initcheck --error-exitcode 127 $INITCHECK_OPTS --log-file cuda-initcheck.log -- cmsRun step3.py >& step3-initcheck.log; then
