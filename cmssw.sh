@@ -45,6 +45,10 @@ function setup_development_release() {
   local RELEASE="$2"
   local BRANCH="$3"
   local REPOSITORY="$4"
+
+  # this should be detected ...
+  local NEED_CUDA_REBUILD=false
+
   # set up the reference area
   cd "$BASE"
   echo "# set up $DIRNAME environment for release $RELEASE"
@@ -55,13 +59,21 @@ function setup_development_release() {
   git cms-init -x $REPOSITORY --upstream-only
   # <add here any required pull request or external update>
   git checkout $REPOSITORY/$BRANCH -b $BRANCH
-  git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u) || true
-  git cms-checkdeps -a
-  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
-  # configure the cuda tool for the devices present on the local system
-  cmsCudaSetup.sh
-  # rebuild all packages containing CUDA code
-  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" cmsCudaRebuild.sh
+  # if the CUDA architecture on the local machine is not supported by the release,
+  # reconfigure CUDA and rebuild all CUDA packages
+  if $NEED_CUDA_REBUILD; then
+    # configure the cuda tool for the devices present on the local system
+    cmsCudaSetup.sh
+    # rebuild all packages containing CUDA code
+    USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" cmsCudaRebuild.sh
+  fi
+  # check out any packages that are different from the release and their dependencies,
+  # and build them
+  if ! git diff --quiet $CMSSW_VERSION; then
+    git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u)
+    git cms-checkdeps -a
+    USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
+  fi
   git rev-parse --short=12 HEAD > ../hash
   if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
     echo "# update $DIRNAME environment on branch $BRANCH with"
