@@ -15,7 +15,7 @@ WORKFLOWS="10824.5 10824.51 10824.52"
 PROFILING="10824.52"
 MEMCHECKS="10824.52"
 
-# Default number of events
+# Default number of events (overridden with sample-specific values in input.sh)
 NUMEVENTS=100
 
 # Number of events for the memcheck workflows

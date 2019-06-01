@@ -98,7 +98,7 @@ function build_matrix() {
       echo "# prepare workflow $WORKFLOW"
       $STEP3 $INPUT --no_exec --python_filename=step3.py
       $STEP4        --no_exec --python_filename=step4.py
-      # add the NVProfilerService to step3
+      # add the NVProfilerService to profile, and show CUDAService messages
       sed -i step3.py -e '/\# End of customisation functions/i \
 # Mark CMSSW transitions and modules in the nvprof profile\
 from FWCore.ParameterSet.Utilities import moduleLabelsInSequences\
@@ -121,7 +121,7 @@ process.MessageLogger.categories.append("CUDAService")\
         touch .has_profiling
         # create a profiling workflow
         $STEP3 $INPUT --no_exec --customise ${CUSTOMISE}.customizePixelTracksForProfiling --python_filename=profile.py
-        # add the NVProfilerService to profile
+        # add the NVProfilerService to profile, and show CUDAService messages
         sed -i profile.py -e '/\# End of customisation functions/i \
 # Mark CMSSW transitions and modules in the nvprof profile\
 from FWCore.ParameterSet.Utilities import moduleLabelsInSequences\
@@ -142,9 +142,8 @@ process.MessageLogger.categories.append("CUDAService")\
       if has_memcheck $WORKFLOW; then
         # prepare the workflow to run the various cuda-memcheck checks
         cp step3.py memcheck.py
-        echo >> memcheck.py
-        echo '# limit he number of events for cuda-memcheck' >> memcheck.py
-        echo 'process.maxEvents.input = 10' >> memcheck.py
+        (( MEMCHECK_NUMEVENTS )) || local MEMCHECK_NUMEVENTS=10
+        echo -e "\n# set the number of events for the memcheck workflows\nprocess.maxEvents = cms.untracked.PSet(\n    input = cms.untracked.int32($MEMCHECK_NUMEVENTS)\n)" >> memcheck.py
       fi
 
       cd ..
@@ -155,7 +154,6 @@ process.MessageLogger.categories.append("CUDAService")\
 
 function run_workflow() {
   local WORKDIR="$1"
-  local STEP3_SUCCESS
 
   cd $BASE/$WORKDIR
   echo "# at $WORKDIR"
@@ -164,75 +162,74 @@ function run_workflow() {
   # run step 3
   echo -n "# running step3... "
   if nvprof -f -o step3.nvvp -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
-    STEP3_SUCCESS=true
     echo "done"
+    touch step3.done
   else
-    STEP3_SUCCESS=false
     echo "failed"
     tail step3.log
+    touch step3.fail
+    # do not attempt to run other steps if step3 failed
+    cd $BASE
+    return
   fi
 
-  # do not attempt to run step4 or profile if step3 failed
-  if $STEP3_SUCCESS; then
-    # run step 4
-    echo -n "# running step4... "
-    if cmsRun step4.py >& step4.log; then
+  # run step 4
+  echo -n "# running step4... "
+  if cmsRun step4.py >& step4.log; then
+    echo "done"
+    touch step4.done
+  else
+    echo "failed"
+    tail step4.log
+    touch step4.fail
+  fi
+
+  # (optional) run profile
+  if [ -f profile.py ]; then
+    echo -n "# running profile... "
+    if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
       echo "done"
+      touch profile.done
     else
       echo "failed"
-      tail step4.log
-    fi
-
-    # (optional) run profile
-    if [ -f .has_profiling ]; then
-      echo -n "# running profile... "
-      if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
-        echo "done"
-      else
-        echo "failed"
-        tail profile.log
-      fi
+      tail profile.log
+      touch profile.fail
     fi
   fi
 
   # (optional) run cuda-memcheck
   if [ -f memcheck.py ]; then
-    # set the number of events for the memcheck workflows
-    if (( MEMCHECK_NUMEVENTS )); then
-      echo -e "\n# set the number of events for the memcheck workflows\nprocess.maxEvents = cms.untracked.PSet(\n    input = cms.untracked.int32($MEMCHECK_NUMEVENTS)\n)" >> step3.py
-    fi
-
     # initcheck
     echo -n "# running cuda-memcheck --tool initcheck... "
-    if cuda-memcheck --tool initcheck --error-exitcode 127 $INITCHECK_OPTS --log-file cuda-initcheck.log -- cmsRun step3.py >& step3-initcheck.log; then
-      [ -f step3-initcheck.log ] && cat step3-initcheck.log | c++filt -i > demangled && mv demangled step3-initcheck.log
+    if cuda-memcheck --tool initcheck --error-exitcode 127 $SYNCCHECK_OPTS --log-file initcheck.out -- cmsRun memcheck.py >& initcheck.log; then
+      [ -f initcheck.log ] && cat initcheck.log | c++filt -i > demangled && mv demangled initcheck.log
       echo "done"
       touch cuda-initcheck.done
     else
       echo "failed"
-      tail cuda-initcheck.log
+      tail initcheck.out
       touch cuda-initcheck.fail
     fi
     # memcheck
     echo -n "# running cuda-memcheck --tool memcheck... "
-    if cuda-memcheck --tool memcheck --error-exitcode 127 $MEMCHECK_OPTS --log-file cuda-memcheck.log -- cmsRun step3.py >& step3-memcheck.log; then
-      [ -f step3-memcheck.log ] && cat step3-memcheck.log | c++filt -i > demangled && mv demangled step3-memcheck.log
+    if cuda-memcheck --tool memcheck --error-exitcode 127 $MEMCHECK_OPTS --log-file memcheck.out -- cmsRun memcheck.py >& memcheck.log; then
+      [ -f memcheck.log ] && cat memcheck.log | c++filt -i > demangled && mv demangled memcheck.log
       echo "done"
       touch cuda-memcheck.done
     else
       echo "failed"
-      tail cuda-memcheck.log
+      tail memcheck.out
       touch cuda-memcheck.fail
     fi
     # synccheck
     echo -n "# running cuda-memcheck --tool synccheck... "
-    if cuda-memcheck --tool synccheck --error-exitcode 127 $SYNCCHECK_OPTS --log-file cuda-synccheck.log -- cmsRun step3.py >& step3-synccheck.log; then
-      [ -f step3-synccheck.log ] && cat step3-synccheck.log | c++filt -i > demangled && mv demangled step3-synccheck.log
+    if cuda-memcheck --tool synccheck --error-exitcode 127 $SYNCCHECK_OPTS --log-file synccheck.out -- cmsRun memcheck.py >& synccheck.log; then
+      [ -f synccheck.log ] && cat synccheck.log | c++filt -i > demangled && mv demangled synccheck.log
       echo "done"
       touch cuda-synccheck.done
     else
       echo "failed"
-      tail cuda-synccheck.log
+      tail synccheck.out
       touch cuda-synccheck.fail
     fi
   fi
@@ -377,62 +374,73 @@ function upload_artefacts() {
     # update the report
     if ! [ -f ${FILE}.py ]; then
       # the workflow has not been created
-      report "      - ${NAME}.py: the python configuration was not created, see the full log for more information"
+      report "      - :x: ${NAME}.py: the python configuration was not created, see the full log for more information"
       continue
     fi
     if ! [ -f ${FILE}.log ]; then
       # if there is no log file, the workflow most likely did not run at all
-      report "      - :warning: [${NAME}.py]($UPLOAD_URL/${PART}.py): log, profile and summary are **missing**, see the full log for more information"
+      report "      - :x: [${NAME}.py]($UPLOAD_URL/${PART}.py): log, profile and summary are **missing**, see the full log for more information"
       continue
     fi
+    local FLAG
+    # check if the job was successful
+    if [ -f ${FILE}.done ]; then
+      FLAG=":heavy_check_mark:"
+    else
+      FLAG=":x:"
+    fi 
     # check for both profile and summary
     if [ -f ${FILE}.nvvp ] && [ -f ${FILE}.profile ]; then
-      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile)"
+      report "      - ${FLAG} [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile)"
     elif [ -f ${FILE}.nvvp ]; then
-      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [visual profile]($UPLOAD_URL/${PART}.nvvp)"
+      report "      - ${FLAG} [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [visual profile]($UPLOAD_URL/${PART}.nvvp)"
     elif [ -f ${FILE}.profile ]; then
-      report "      - [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile)"
+      report "      - ${FLAG} [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile)"
     else
-      report "      - :warning: [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log); the visual profile and summary are **missing**"
+      report "      - ${FLAG} [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log); the visual profile and summary are **missing**"
     fi
+    unset FLAG
   done
 
   # check for cuda-memcheck
   if [ -f $CWD/memcheck.py ]; then
     local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW
     # cuda-memcheck --tool initcheck
-    copy_if_exists $CWD/cuda-initcheck.log  $UPLOAD_DIR/$PART-cuda-initcheck.log
-    copy_if_exists $CWD/step3-initcheck.log $UPLOAD_DIR/$PART-step3-initcheck.log
-    local ERRORS="**some errors**"
-    [ -f $CWD/cuda-initcheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-initcheck.log | cut -d: -f2 | sed -e's/========= No CUDA-MEMCHECK results found/no CUDA-MEMCHECK results/'))**"
+    copy_if_exists $CWD/initcheck.out $UPLOAD_DIR/$PART-initcheck.out
+    copy_if_exists $CWD/initcheck.log $UPLOAD_DIR/$PART-initcheck.log
     if [ -f $CWD/cuda-initcheck.done ]; then
-      report "      - :heavy_check_mark: \`cuda-memcheck --tool initcheck $INITCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-initcheck.log), [log]($UPLOAD_URL/$PART-step3-initcheck.log)) did not find any errors"
+      report "      - :heavy_check_mark: \`cuda-memcheck --tool initcheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-initcheck.out), [log]($UPLOAD_URL/$PART-initcheck.log)) did not find any errors"
     elif [ -f $CWD/cuda-initcheck.fail ]; then
-      report "      - :x: \`cuda-memcheck --tool initcheck $INITCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-initcheck.log), [log]($UPLOAD_URL/$PART-step3-initcheck.log)) found $ERRORS"
+      local ERRORS="**some errors**"
+      [ -f $CWD/initcheck.out ] && ERRORS="**$(echo $(tail -n1 $CWD/initcheck.out | cut -d: -f2 | sed -e's/========= No CUDA-MEMCHECK results found/no CUDA-MEMCHECK results/'))**"
+      report "      - :x: \`cuda-memcheck --tool initcheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-initcheck.out), [log]($UPLOAD_URL/$PART-initcheck.log)) found $ERRORS"
+      unset ERRORS
     else
-      report "      - :warning: \`cuda-memcheck --tool initcheck $INITCHECK_OPTS\` did not run"
+      report "      - :warning: \`cuda-memcheck --tool initcheck $SYNCCHECK_OPTS\` did not run"
     fi
     # cuda-memcheck --tool memcheck
-    copy_if_exists $CWD/cuda-memcheck.log  $UPLOAD_DIR/$PART-cuda-memcheck.log
-    copy_if_exists $CWD/step3-memcheck.log $UPLOAD_DIR/$PART-step3-memcheck.log
-    local ERRORS="**some errors**"
-    [ -f $CWD/cuda-memcheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-memcheck.log | cut -d: -f2 | sed -e's/========= No CUDA-MEMCHECK results found/no CUDA-MEMCHECK results/'))**"
+    copy_if_exists $CWD/memcheck.out $UPLOAD_DIR/$PART-memcheck.out
+    copy_if_exists $CWD/memcheck.log $UPLOAD_DIR/$PART-memcheck.log
     if [ -f $CWD/cuda-memcheck.done ]; then
-      report "      - :heavy_check_mark: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-memcheck.log), [log]($UPLOAD_URL/$PART-step3-memcheck.log)) did not find any errors"
+      report "      - :heavy_check_mark: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-memcheck.out), [log]($UPLOAD_URL/$PART-memcheck.log)) did not find any errors"
     elif [ -f $CWD/cuda-memcheck.fail ]; then
-      report "      - :x: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-memcheck.log), [log]($UPLOAD_URL/$PART-step3-memcheck.log)) found $ERRORS"
+      local ERRORS="**some errors**"
+      [ -f $CWD/memcheck.out ] && ERRORS="**$(echo $(tail -n1 $CWD/memcheck.out | cut -d: -f2 | sed -e's/========= No CUDA-MEMCHECK results found/no CUDA-MEMCHECK results/'))**"
+      report "      - :x: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-memcheck.out), [log]($UPLOAD_URL/$PART-memcheck.log)) found $ERRORS"
+      unset ERRORS
     else
       report "      - :warning: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` did not run"
     fi
     # cuda-memcheck --tool synccheck
-    copy_if_exists $CWD/cuda-synccheck.log  $UPLOAD_DIR/$PART-cuda-synccheck.log
-    copy_if_exists $CWD/step3-synccheck.log $UPLOAD_DIR/$PART-step3-synccheck.log
-    local ERRORS="**some errors**"
-    [ -f $CWD/cuda-synccheck.log ] && ERRORS="**$(echo $(tail -n1 $CWD/cuda-synccheck.log | cut -d: -f2 | sed -e's/========= No CUDA-MEMCHECK results found/no CUDA-MEMCHECK results/'))**"
+    copy_if_exists $CWD/synccheck.out $UPLOAD_DIR/$PART-synccheck.out
+    copy_if_exists $CWD/synccheck.log $UPLOAD_DIR/$PART-synccheck.log
     if [ -f $CWD/cuda-synccheck.done ]; then
-      report "      - :heavy_check_mark: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-synccheck.log), [log]($UPLOAD_URL/$PART-step3-synccheck.log)) did not find any errors"
+      report "      - :heavy_check_mark: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-synccheck.out), [log]($UPLOAD_URL/$PART-synccheck.log)) did not find any errors"
     elif [ -f $CWD/cuda-synccheck.fail ]; then
-      report "      - :x: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-cuda-synccheck.log), [log]($UPLOAD_URL/$PART-step3-synccheck.log)) found $ERRORS"
+      local ERRORS="**some errors**"
+      [ -f $CWD/synccheck.out ] && ERRORS="**$(echo $(tail -n1 $CWD/synccheck.out | cut -d: -f2 | sed -e's/========= No CUDA-MEMCHECK results found/no CUDA-MEMCHECK results/'))**"
+      report "      - :x: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-synccheck.out), [log]($UPLOAD_URL/$PART-synccheck.log)) found $ERRORS"
+      unset ERRORS
     else
       report "      - :warning: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` did not run"
     fi
