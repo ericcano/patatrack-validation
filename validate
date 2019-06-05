@@ -247,15 +247,38 @@ function run_workflows() {
 }
 
 function run_workflows_in_parallel() {
-  local MAXJOBS=$(($1))
   cd $BASE
 
+  # create a named pipe
+  local FIFO=$(mktemp -u pipeXXXXXXXXXX)
+  mkfifo $FIFO
+  exec 3<>$FIFO
+  rm $FIFO
+
+  # put in the fifo a token per GPU
+  local GPU
+  local TOKEN
+  nvidia-smi -L | cut -d: -f1 | while read GPU TOKEN; do
+    printf "%s," "$TOKEN" >&3
+  done
+
+  local MAXJOBS=$(($1))
   local WORKDIR
   for WORKDIR in $(apply_and_glob "%/run/*/*/" "$@"); do
-    # run up to MAXJOBS in parallel
-    while (( $(jobs | wc -l) >= $MAXJOBS )); do sleep 1; done
-    run_workflow $WORKDIR &
+    # block until a token is available
+    local TOKEN
+    read -u3 -d, TOKEN
+
+    (
+      # run the task in an asynchronous sub-shell
+      CUDA_VISIBLE_DEVICES=$TOKEN run_workflow $WORKDIR
+
+      # put back the token
+      printf '%s,' $TOKEN >&3
+    )&
   done
+
+  # wait for all tasks to complete
   wait
 }
 
@@ -544,7 +567,7 @@ JOBID=$({ echo $SCRIPTHASH; cat $(apply_and_glob "$BASE/%/hash" $DIRECTORIES); }
 echo $JOBID > $BASE/jobid
 
 # run the workflows
-run_workflows $DIRECTORIES
+run_workflows_in_parallel $DIRECTORIES
 upload_report $ISSUE_NUMBER $COMMENT_ID
 # make validation plots
 make_validation_plots $DIRECTORIES
