@@ -17,4 +17,5 @@ TTBARDESIGN_CACHE_FILE="EDEA7471-BA5A-1147-A442-F2F6B6D6034B.root"
 
 # URL and local area for uploading validation plots, profiles and logs
 UPLOAD_URL="https://${USER}.web.cern.ch/${USER}/patatrack/pulls"
-UPLOAD_DIR="$HOME/www/patatrack/pulls"
+UPLOAD_REL="www/patatrack/pulls"
+UPLOAD_DIR="$HOME/$UPLOAD_REL"

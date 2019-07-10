@@ -589,3 +589,9 @@ cat $REPORT
 
 # post the report to GitHub
 upload_final_report $ISSUE_NUMBER $COMMENT_ID
+
+# suggest to upload the plots and reports
+if ! hostname | grep -q '\.cern\.ch'; then
+  echo "Please upload the plots and reports with:"
+  echo "  rsync -arvzz $UPLOAD_DIR/$JOBID lxplus.cern.ch:$UPLOAD_REL/"
+fi
