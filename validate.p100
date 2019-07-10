@@ -1,7 +1,7 @@
 #! /bin/bash
 
-# request 1 node, 1 task, 24 CPUs, 3 V100 GPUs, and redirect the output and error
-#SBATCH --partition=gpu --nodes=1 --tasks-per-node=1 --cpus-per-task=24 --gres=gpu:3 --constraint=v100 -o validation.%j.out -e validation.%j.err
+# request 1 node, 1 task, 20 CPUs, 2 P100 GPUs, and redirect the output and error
+#SBATCH --partition=gpu --nodes=1 --tasks-per-node=1 --cpus-per-task=20 --gres=gpu:2 --constraint=p100 -o validation.%j.out -e validation.%j.err
 
 # configure GCC 8.2.x and CUDA 10.1
 module purge
