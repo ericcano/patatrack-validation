@@ -6,14 +6,6 @@ DQMFILE="DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root"
 # URL of the DQM GUI used to upload files
 DQMGUI_URL="http://dqmgui7.cern.ch:8060/dqm/dev"
 
-# full path to visDQMUpload
-DQMGUI_UPLOAD=$(dirname $(readlink -f ${BASH_SOURCE[0]}))/visDQMUpload
-if ! [ -x $DQMGUI_UPLOAD ]; then
-  DQMGUIREPO="https://raw.githubusercontent.com/rovere/dqmgui/index128"
-  wget -q "$DQMGUIREPO/bin/visDQMUpload" "$DQMGUIREPO/src/python/DQM/visDQMUtils.py" -nd -P $(dirname $DQMGUI_UPLOAD)/
-  chmod +x $DQMGUI_UPLOAD
-fi
-
 
 # Build a link to the DQM GUI showing one or more test results
 #
@@ -96,6 +88,14 @@ function upload_dqm_plots() {
   [ "$1" ] || return 1
   local REFERENCE_RELEASE="$1"; shift
   local RELEASES=("$@")
+
+  # download the DQM upload tool
+  DQMGUI_UPLOAD=$(dirname $(readlink -f ${BASH_SOURCE[0]}))/visDQMUpload
+  if ! [ -x $DQMGUI_UPLOAD ]; then
+    DQMGUIREPO="https://raw.githubusercontent.com/rovere/dqmgui/index128"
+    wget -q "$DQMGUIREPO/bin/visDQMUpload" "$DQMGUIREPO/src/python/DQM/visDQMUtils.py" -nd -P $(dirname $DQMGUI_UPLOAD)/
+    chmod +x $DQMGUI_UPLOAD
+  fi
 
   report "### DQM GUI plots"
 
