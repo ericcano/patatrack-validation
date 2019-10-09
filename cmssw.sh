@@ -2,7 +2,7 @@
 #VO_CMS_SW_DIR from local.sh
 
 # CMSSW configuration
-export SCRAM_ARCH=slc7_amd64_gcc700
+export SCRAM_ARCH=slc7_amd64_gcc820
 source $VO_CMS_SW_DIR/cmsset_default.sh
 
 # Number of threads and streams used in each job
