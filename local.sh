@@ -1,11 +1,11 @@
 # Local CMSSW installation
-VO_CMS_SW_DIR=/mnt/home/fwyzard/cmssw
+VO_CMS_SW_DIR=/data/cmssw
 
 # OAuth token to post comments on GitHub
 OAUTH_FILE=$HOME/.patatrack-validation.oauth
 
 # Local cache of the input files
-LOCAL_CACHE_PATH=/mnt/ceph/users/fwyzard
+LOCAL_CACHE_PATH=/gpu_data
 
 # Local cache of the input files
 TTBAR_CACHE_PATH="file:$LOCAL_CACHE_PATH/store/relval/CMSSW_10_6_0/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_106X_upgrade2018_realistic_v4-v1/10000"
