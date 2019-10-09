@@ -120,7 +120,7 @@ process.MessageLogger.categories.append("CUDAService")\
         # mark the workflow to run the profiling job
         touch .has_profiling
         # create a profiling workflow
-        $STEP3 $INPUT --no_exec --customise ${CUSTOMISE}.customizePixelTracksForProfiling --python_filename=profile.py
+        $STEP3 $INPUT --no_exec --customise ${CUSTOMISE}.customizePixelTracksForProfilingGPUOnly --python_filename=profile.py
         # add the NVProfilerService to profile, and show CUDAService messages
         sed -i profile.py -e '/\# End of customisation functions/i \
 # Mark CMSSW transitions and modules in the nvprof profile\
