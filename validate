@@ -161,7 +161,7 @@ function run_workflow() {
 
   # run step 3
   echo -n "# running step3... "
-  if nvprof -f -o step3.nvvp -s --log-file step3.profile -- cmsRun step3.py >& step3.log; then
+  if cmsRun step3.py >& step3.log; then
     echo "done"
     touch step3.done
   else
@@ -325,14 +325,14 @@ function make_validation_plots() {
     # validation of all workflows across all releases
     local WORKFLOW
     for WORKFLOW in $WORKFLOWS; do
-      mkdir -p $UPLOAD_DIR/$JOBID/$WORKDIR/$WORKFLOW
+      mkdir -p $LOCAL_DIR/$JOBID/$WORKDIR/$WORKFLOW
       if [ "$WORKFLOW" == "$REFERENCE_WORKFLOW" ]; then
         # reference workflow
         makeTrackValidationPlots.py \
           --extended \
           --html-sample $DATASET \
           --html-validation-name $DATASET \
-          --outputDir $UPLOAD_DIR/$JOBID/$WORKDIR/$REFERENCE_WORKFLOW \
+          --outputDir $LOCAL_DIR/$JOBID/$WORKDIR/$REFERENCE_WORKFLOW \
           ${RELEASES[@]/%/-${REFERENCE_WORKFLOW}.root}
         report "  - tracking validation [plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) and [summary]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/plots_summary.html) for workflow $WORKFLOW"
       else
@@ -347,7 +347,7 @@ function make_validation_plots() {
             --extended \
             --html-sample $DATASET \
             --html-validation-name $DATASET \
-            --outputDir $UPLOAD_DIR/$JOBID/$WORKDIR/$WORKFLOW \
+            --outputDir $LOCAL_DIR/$JOBID/$WORKDIR/$WORKFLOW \
             ${REFERENCE_RELEASE}-${REFERENCE_WORKFLOW}.root \
             ${TESTING_RELEASES[0]}-${REFERENCE_WORKFLOW}.root \
             $FILES
@@ -390,10 +390,10 @@ function upload_artefacts() {
     local FILE=$CWD/$NAME
     local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW-$NAME
     # upload the python configuration file, log, and nvprof results (if they exist)
-    copy_if_exists ${FILE}.py      $UPLOAD_DIR/${PART}.py
-    copy_if_exists ${FILE}.log     $UPLOAD_DIR/${PART}.log
-    copy_if_exists ${FILE}.nvvp    $UPLOAD_DIR/${PART}.nvvp
-    copy_if_exists ${FILE}.profile $UPLOAD_DIR/${PART}.profile
+    copy_if_exists ${FILE}.py      $LOCAL_DIR/${PART}.py
+    copy_if_exists ${FILE}.log     $LOCAL_DIR/${PART}.log
+    copy_if_exists ${FILE}.nvvp    $LOCAL_DIR/${PART}.nvvp
+    copy_if_exists ${FILE}.profile $LOCAL_DIR/${PART}.profile
     # update the report
     if ! [ -f ${FILE}.py ]; then
       # the workflow has not been created
@@ -420,7 +420,7 @@ function upload_artefacts() {
     elif [ -f ${FILE}.profile ]; then
       report "      - ${FLAG} [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log) and [summary]($UPLOAD_URL/${PART}.profile)"
     else
-      report "      - ${FLAG} [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log); the visual profile and summary are **missing**"
+      report "      - ${FLAG} [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log)"
     fi
     unset FLAG
   done
@@ -429,8 +429,8 @@ function upload_artefacts() {
   if [ -f $CWD/memcheck.py ]; then
     local PART=$JOBID/$WORKDIR/$RELEASE-$WORKFLOW
     # cuda-memcheck --tool initcheck
-    copy_if_exists $CWD/initcheck.out $UPLOAD_DIR/$PART-initcheck.out
-    copy_if_exists $CWD/initcheck.log $UPLOAD_DIR/$PART-initcheck.log
+    copy_if_exists $CWD/initcheck.out $LOCAL_DIR/$PART-initcheck.out
+    copy_if_exists $CWD/initcheck.log $LOCAL_DIR/$PART-initcheck.log
     if [ -f $CWD/cuda-initcheck.done ]; then
       report "      - :heavy_check_mark: \`cuda-memcheck --tool initcheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-initcheck.out), [log]($UPLOAD_URL/$PART-initcheck.log)) did not find any errors"
     elif [ -f $CWD/cuda-initcheck.fail ]; then
@@ -442,8 +442,8 @@ function upload_artefacts() {
       report "      - :warning: \`cuda-memcheck --tool initcheck $SYNCCHECK_OPTS\` did not run"
     fi
     # cuda-memcheck --tool memcheck
-    copy_if_exists $CWD/memcheck.out $UPLOAD_DIR/$PART-memcheck.out
-    copy_if_exists $CWD/memcheck.log $UPLOAD_DIR/$PART-memcheck.log
+    copy_if_exists $CWD/memcheck.out $LOCAL_DIR/$PART-memcheck.out
+    copy_if_exists $CWD/memcheck.log $LOCAL_DIR/$PART-memcheck.log
     if [ -f $CWD/cuda-memcheck.done ]; then
       report "      - :heavy_check_mark: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-memcheck.out), [log]($UPLOAD_URL/$PART-memcheck.log)) did not find any errors"
     elif [ -f $CWD/cuda-memcheck.fail ]; then
@@ -455,8 +455,8 @@ function upload_artefacts() {
       report "      - :warning: \`cuda-memcheck --tool memcheck $MEMCHECK_OPTS\` did not run"
     fi
     # cuda-memcheck --tool synccheck
-    copy_if_exists $CWD/synccheck.out $UPLOAD_DIR/$PART-synccheck.out
-    copy_if_exists $CWD/synccheck.log $UPLOAD_DIR/$PART-synccheck.log
+    copy_if_exists $CWD/synccheck.out $LOCAL_DIR/$PART-synccheck.out
+    copy_if_exists $CWD/synccheck.log $LOCAL_DIR/$PART-synccheck.log
     if [ -f $CWD/cuda-synccheck.done ]; then
       report "      - :heavy_check_mark: \`cuda-memcheck --tool synccheck $SYNCCHECK_OPTS\` ([report]($UPLOAD_URL/$PART-synccheck.out), [log]($UPLOAD_URL/$PART-synccheck.log)) did not find any errors"
     elif [ -f $CWD/cuda-synccheck.fail ]; then
@@ -516,7 +516,7 @@ function upload_log_files() {
   [ "$1" ] || return 1
   local -a RELEASES=("$@")
 
-  cp $BASE/log $UPLOAD_DIR/$JOBID/log
+  cp $BASE/log $LOCAL_DIR/$JOBID/log
   report "### Logs"
   report "The full log is available at $UPLOAD_URL/$JOBID/log ."
 }
@@ -593,5 +593,5 @@ upload_final_report $ISSUE_NUMBER $COMMENT_ID
 # suggest to upload the plots and reports
 if ! hostname | grep -q '\.cern\.ch'; then
   echo "Please upload the plots and reports with:"
-  echo "  rsync -arvzz $UPLOAD_DIR/$JOBID lxplus.cern.ch:$UPLOAD_REL/"
+  echo "  rsync -arvzz $LOCAL_DIR/$JOBID lxplus.cern.ch:$UPLOAD_DIR/"
 fi

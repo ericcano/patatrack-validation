@@ -16,6 +16,6 @@ TTBARDESIGN_CACHE_PATH="file:$LOCAL_CACHE_PATH/store/relval/CMSSW_10_6_0/RelValT
 TTBARDESIGN_CACHE_FILE="646F7E00-DED1-834F-99B5-72554C4294B8.root,361792E7-D91D-1246-80AE-2D4284A1D1CA.root"
 
 # URL and local area for uploading validation plots, profiles and logs
-UPLOAD_URL="https://${USER}.web.cern.ch/${USER}/patatrack/pulls"
-UPLOAD_REL="www/patatrack/pulls"
-UPLOAD_DIR="$HOME/$UPLOAD_REL"
+UPLOAD_URL="https://patatrack.web.cern.ch/patatrack/validation/pulls"
+UPLOAD_DIR="/eos/home-f/fpantale/www/patatrack-website/validation/pulls"
+LOCAL_DIR="/data/user/$USER/patatrack-validation/pulls"

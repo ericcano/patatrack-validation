@@ -1,11 +1,11 @@
 # Local CMSSW installation
-VO_CMS_SW_DIR=/mnt/home/fwyzard/cmssw
+VO_CMS_SW_DIR=/data/cmssw
 
 # OAuth token to post comments on GitHub
 OAUTH_FILE=$HOME/.patatrack-validation.oauth
 
 # Local cache of the input files
-LOCAL_CACHE_PATH=/mnt/ceph/users/fwyzard
+LOCAL_CACHE_PATH=/gpu_data
 
 # Local cache of the input files
 TTBAR_CACHE_PATH="file:$LOCAL_CACHE_PATH/store/relval/CMSSW_10_5_0/RelValTTbar_13/GEN-SIM-DIGI-RAW/PU25ns_105X_upgrade2018_realistic_v4_HS-v1/10000"
@@ -16,6 +16,6 @@ TTBARDESIGN_CACHE_PATH="file:$LOCAL_CACHE_PATH/store/relval/CMSSW_10_5_0/RelValT
 TTBARDESIGN_CACHE_FILE="EDEA7471-BA5A-1147-A442-F2F6B6D6034B.root"
 
 # URL and local area for uploading validation plots, profiles and logs
-UPLOAD_URL="https://${USER}.web.cern.ch/${USER}/patatrack/pulls"
-UPLOAD_REL="www/patatrack/pulls"
-UPLOAD_DIR="$HOME/$UPLOAD_REL"
+UPLOAD_URL="https://patatrack.web.cern.ch/patatrack/validation/pulls"
+UPLOAD_DIR="/eos/home-f/fpantale/www/patatrack-website/validation/pulls"
+LOCAL_DIR="/data/user/$USER/patatrack-validation/pulls"
