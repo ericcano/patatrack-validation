@@ -157,6 +157,110 @@ process.maxEvents = cms.untracked.PSet(
   done
 }
 
+function build_data_matrix() {
+  local DIRNAME="$1"
+  shift
+  local WORKFLOWS="$@"
+  local SAMPLE DATASET WORKDIR CACHE_PATH CACHE_FILE INPUT MY_GLOBALTAG MY_NUMEVENTS WORKFLOW STEP3 STEP4
+  # create the matrix-like workflows for the various samples
+  cd $BASE/$DIRNAME
+  eval $(scram runtime -sh)
+  for SAMPLE in $DATA_SAMPLES; do
+    DATASET=${!SAMPLE}
+    WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
+    CACHE_PATH=$(eval echo \$$(echo $SAMPLE)_CACHE_PATH)
+    CACHE_FILE=$(eval echo \$$(echo $SAMPLE)_CACHE_FILE)
+    if [ "$CACHE_PATH" ] && [ "$CACHE_FILE" ]; then
+      INPUT="--dirin=$CACHE_PATH --filein $CACHE_FILE"
+    else
+      INPUT="--dasquery 'file dataset=$DATASET'"
+    fi
+    # customise the global tag and number of events by dataset, or use the default values
+    MY_GLOBALTAG=$(eval echo \$$(echo $SAMPLE)_GLOBALTAG)
+    MY_NUMEVENTS=$(eval echo \$$(echo $SAMPLE)_NUMEVENTS)
+    echo "# prepare to run on ${MY_NUMEVENTS:=$NUMEVENTS} events on $DATASET with ${MY_GLOBALTAG:=$GLOBALTAG} conditions"
+    mkdir -p $CMSSW_BASE/run/$WORKDIR
+    cd $CMSSW_BASE/run/$WORKDIR
+    for WORKFLOW in $WORKFLOWS; do
+      # check the the workflow actually exists in the release
+      runTheMatrix.py -n -e -l $WORKFLOW | grep -q ^$WORKFLOW || continue
+      mkdir -p $WORKFLOW
+      cd $WORKFLOW
+      # copy the custom source modules
+      cp $VALIDATION/parts/sourceFromRaw_${WORKDIR}_cff.py sourceFromRaw_cff.py
+      # extract step3 and step4 commands
+      STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
+      STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --filein file:step3_inDQM.root"
+      echo "# prepare workflow $WORKFLOW"
+      $STEP3 $INPUT --no_exec --python_filename=step3.py
+      $STEP4        --no_exec --python_filename=step4.py
+      # show CUDAService messages and configure multithreading
+      cat >> step3.py << @EOF
+
+# Override the source to use the DAQ source
+import sys, os, inspect
+sys.path.append(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))
+process.load("sourceFromRaw_cff")
+
+# Show CUDAService messages
+process.MessageLogger.categories.append("CUDAService")
+
+# Configure multithreading
+process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
+process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
+@EOF
+
+      local PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
+      local PROFILING_FUNC=customizePixelTracksForProfilingGPUOnly
+      if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${PROFILING_FILE}.py ] || [ -f $CMSSW_BASE/python/${PROFILING_FILE}.py ] ); then
+        # mark the workflow to run the profiling job
+        touch .has_profiling
+        # create a profiling workflow
+        $STEP3 $INPUT --no_exec --customise_unsch ${PROFILING_FILE}.${PROFILING_FUNC} --python_filename=profile.py
+        # add the NVProfilerService to profile, show CUDAService messages and configure multithreading
+        cat >> profile.py << @EOF
+
+# Override the source to use the DAQ source
+import sys, os, inspect
+sys.path.append(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))
+process.load("sourceFromRaw_cff")
+
+# Mark CMSSW transitions and modules in the nvprof profile
+from FWCore.ParameterSet.Utilities import moduleLabelsInSequences
+process.NVProfilerService = cms.Service("NVProfilerService",
+    highlightModules = cms.untracked.vstring( moduleLabelsInSequences(process.reconstruction_step) ),
+    showModulePrefetching = cms.untracked.bool( False )
+)
+
+# Show CUDAService messages
+process.MessageLogger.categories.append("CUDAService")
+
+# Configure multithreading
+process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
+process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
+@EOF
+      fi
+
+      if has_memcheck $WORKFLOW; then
+        # prepare the workflow to run the various cuda-memcheck checks
+        cp step3.py memcheck.py
+        (( MEMCHECK_NUMEVENTS )) || local MEMCHECK_NUMEVENTS=10
+        cat >> memcheck.py << @EOF
+
+# Set the number of events for the memcheck workflows
+process.maxEvents = cms.untracked.PSet(
+    input = cms.untracked.int32($MEMCHECK_NUMEVENTS)
+)
+@EOF
+      fi
+
+      cd ..
+    done
+    echo
+  done
+}
+
+
 function run_workflow() {
   local WORKDIR="$1"
 
@@ -547,6 +651,7 @@ upload_report $ISSUE_NUMBER $COMMENT_ID
 setup_development_release "development" CMSSW_11_0_0_pre7_Patatrack CMSSW_11_0_X_Patatrack $REPOSITORY
 report "Development branch [CMSSW_11_0_X_Patatrack](https://github.com/$REPOSITORY/cmssw/tree/CMSSW_11_0_X_Patatrack) at $(< $BASE/development/hash)"
 build_matrix "development" "$WORKFLOWS"
+build_data_matrix "development" "$DATA_WORKFLOWS"
 DIRECTORIES+=" development"
 upload_report $ISSUE_NUMBER $COMMENT_ID
 
@@ -562,6 +667,7 @@ if [ "$*" ]; then
   git rev-parse --short=12 HEAD > ../hash
   USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
   build_matrix "testing" "$WORKFLOWS"
+  build_data_matrix "testing" "$DATA_WORKFLOWS"
   DIRECTORIES+=" testing"
 fi
 report
