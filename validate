@@ -118,7 +118,25 @@ process.MessageLogger.categories.append("CUDAService")
 # Configure multithreading
 process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
+process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32( 1 )
 @EOF
+        if echo ${MY_GLOBALTAG} | grep -q realistic; then
+          # use cuts for "realistic" conditions
+          cat >> step3.py << @EOF
+
+# Use "realistic" cuts
+if 'caHitNtupletCUDA' in process.__dict__:
+  process.caHitNtupletCUDA.idealConditions = False
+@EOF
+        else
+          # use cuts for "design" conditions
+          cat >> step3.py << @EOF
+
+# Use "design" cuts
+if 'caHitNtupletCUDA' in process.__dict__:
+  process.caHitNtupletCUDA.idealConditions = True
+@EOF
+        fi
       fi
 
       local PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
@@ -142,7 +160,25 @@ process.MessageLogger.categories.append("CUDAService")
 # Configure multithreading
 process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
+process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32( 1 )
 @EOF
+        if echo ${MY_GLOBALTAG} | grep -q realistic; then
+          # use cuts for "realistic" conditions
+          cat >> step3.py << @EOF
+
+# Use "realistic" cuts
+if 'caHitNtupletCUDA' in process.__dict__:
+  process.caHitNtupletCUDA.idealConditions = False
+@EOF
+        else
+          # use cuts for "design" conditions
+          cat >> step3.py << @EOF
+
+# Use "design" cuts
+if 'caHitNtupletCUDA' in process.__dict__:
+  process.caHitNtupletCUDA.idealConditions = True
+@EOF
+        fi
       fi
 
       if has_memcheck $WORKFLOW; then
@@ -219,6 +255,11 @@ process.MessageLogger.categories.append("CUDAService")
 # Configure multithreading
 process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
+process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32( 1 )
+
+# Use "realistic" cuts
+if 'caHitNtupletCUDA' in process.__dict__:
+  process.caHitNtupletCUDA.idealConditions = False
 @EOF
       fi
 
@@ -248,6 +289,11 @@ process.MessageLogger.categories.append("CUDAService")
 # Configure multithreading
 process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
+process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32( 1 )
+
+# Use "realistic" cuts
+if 'caHitNtupletCUDA' in process.__dict__:
+  process.caHitNtupletCUDA.idealConditions = False
 @EOF
         touch .scan_profile
       fi
