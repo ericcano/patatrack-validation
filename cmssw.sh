@@ -17,8 +17,9 @@ WORKFLOWS="10824.5 10824.51 10824.52"
 DATA_WORKFLOWS="136.86452"
 
 # Enable profiling and memcheck for selected workflows
+VALIDATE="10824.5 10824.51 10824.52"
 PROFILING="10824.52 136.86452"
-MEMCHECKS="10824.52 136.86452"
+MEMCHECKS="10824.52"
 
 # Default number of events (overridden with sample-specific values in input.sh)
 NUMEVENTS=100

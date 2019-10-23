@@ -56,6 +56,11 @@ function apply_and_glob() {
   echo $(apply "$@")
 }
 
+function has_validate() {
+  local WORKFLOW=$1
+  echo "$VALIDATE" | grep -q -w "$WORKFLOW"
+}
+
 function has_profiling() {
   local WORKFLOW=$1
   echo "$PROFILING" | grep -q -w "$WORKFLOW"
@@ -70,7 +75,7 @@ function build_matrix() {
   local DIRNAME="$1"
   shift
   local WORKFLOWS="$@"
-  local SAMPLE DATASET WORKDIR CACHE_PATH CACHE_FILE INPUT MY_GLOBALTAG MY_NUMEVENTS WORKFLOW STEP3 STEP4
+  local SAMPLE DATASET WORKDIR CACHE_PATH CACHE_FILE INPUT MY_GLOBALTAG MY_NUMEVENTS WORKFLOW
   # create the matrix-like workflows for the various samples
   cd $BASE/$DIRNAME
   eval $(scram runtime -sh)
@@ -95,14 +100,17 @@ function build_matrix() {
       runTheMatrix.py -n -e -l $WORKFLOW | grep -q ^$WORKFLOW || continue
       mkdir -p $WORKFLOW
       cd $WORKFLOW
+
       # extract step3 and step4 commands
-      STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
-      STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --filein file:step3_inDQM.root"
-      echo "# prepare workflow $WORKFLOW"
-      $STEP3 $INPUT --no_exec --python_filename=step3.py
-      $STEP4        --no_exec --python_filename=step4.py
-      # show CUDAService messages and configure multithreading
-      cat >> step3.py << @EOF
+      local STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
+      local STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --filein file:step3_inDQM.root"
+
+      if has_validate $WORKFLOW; then
+        echo "# prepare workflow $WORKFLOW"
+        $STEP3 $INPUT --no_exec --python_filename=step3.py
+        $STEP4        --no_exec --python_filename=step4.py
+        # show CUDAService messages and configure multithreading
+        cat >> step3.py << @EOF
 
 # Show CUDAService messages
 process.MessageLogger.categories.append("CUDAService")
@@ -111,12 +119,11 @@ process.MessageLogger.categories.append("CUDAService")
 process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
 @EOF
+      fi
 
       local PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
       local PROFILING_FUNC=customizePixelTracksForProfilingGPUOnly
       if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${PROFILING_FILE}.py ] || [ -f $CMSSW_BASE/python/${PROFILING_FILE}.py ] ); then
-        # mark the workflow to run the profiling job
-        touch .has_profiling
         # create a profiling workflow
         $STEP3 $INPUT --no_exec --customise_unsch ${PROFILING_FILE}.${PROFILING_FUNC} --python_filename=profile.py
         # add the NVProfilerService to profile, show CUDAService messages and configure multithreading
@@ -161,7 +168,7 @@ function build_data_matrix() {
   local DIRNAME="$1"
   shift
   local WORKFLOWS="$@"
-  local SAMPLE DATASET WORKDIR CACHE_PATH CACHE_FILE INPUT MY_GLOBALTAG MY_NUMEVENTS WORKFLOW STEP3 STEP4
+  local SAMPLE DATASET WORKDIR CACHE_PATH CACHE_FILE INPUT MY_GLOBALTAG MY_NUMEVENTS WORKFLOW
   # create the matrix-like workflows for the various samples
   cd $BASE/$DIRNAME
   eval $(scram runtime -sh)
@@ -186,16 +193,20 @@ function build_data_matrix() {
       runTheMatrix.py -n -e -l $WORKFLOW | grep -q ^$WORKFLOW || continue
       mkdir -p $WORKFLOW
       cd $WORKFLOW
+
       # copy the custom source modules
       cp $VALIDATION/parts/sourceFromRaw_${WORKDIR}_cff.py sourceFromRaw_cff.py
+
       # extract step3 and step4 commands
-      STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
-      STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --filein file:step3_inDQM.root"
-      echo "# prepare workflow $WORKFLOW"
-      $STEP3 $INPUT --no_exec --python_filename=step3.py
-      $STEP4        --no_exec --python_filename=step4.py
-      # show CUDAService messages and configure multithreading
-      cat >> step3.py << @EOF
+      local STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
+      local STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --filein file:step3_inDQM.root"
+
+      if has_validate $WORKFLOW; then
+        echo "# prepare workflow $WORKFLOW"
+        $STEP3 $INPUT --no_exec --python_filename=step3.py
+        $STEP4        --no_exec --python_filename=step4.py
+        # show CUDAService messages and configure multithreading
+        cat >> step3.py << @EOF
 
 # Override the source to use the DAQ source
 import sys, os, inspect
@@ -209,12 +220,11 @@ process.MessageLogger.categories.append("CUDAService")
 process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
 @EOF
+      fi
 
       local PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
       local PROFILING_FUNC=customizePixelTracksForProfilingGPUOnly
       if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${PROFILING_FILE}.py ] || [ -f $CMSSW_BASE/python/${PROFILING_FILE}.py ] ); then
-        # mark the workflow to run the profiling job
-        touch .has_profiling
         # create a profiling workflow
         $STEP3 $INPUT --no_exec --customise_unsch ${PROFILING_FILE}.${PROFILING_FUNC} --python_filename=profile.py
         # add the NVProfilerService to profile, show CUDAService messages and configure multithreading
@@ -268,29 +278,32 @@ function run_workflow() {
   echo "# at $WORKDIR"
   eval $(scram runtime -sh)
 
-  # run step 3
-  echo -n "# running step3... "
-  if cmsRun step3.py >& step3.log; then
-    echo "done"
-    touch step3.done
-  else
-    echo "failed"
-    tail step3.log
-    touch step3.fail
-    # do not attempt to run other steps if step3 failed
-    cd $BASE
-    return
-  fi
+  # (optional) run the validation
+  if [ -f step3.py ]; then
+    # run step 3
+    echo -n "# running step3... "
+    if cmsRun step3.py >& step3.log; then
+      echo "done"
+      touch step3.done
+    else
+      echo "failed"
+      tail step3.log
+      touch step3.fail
+      # do not attempt to run other steps if step3 failed
+      cd $BASE
+      return
+    fi
 
-  # run step 4
-  echo -n "# running step4... "
-  if cmsRun step4.py >& step4.log; then
-    echo "done"
-    touch step4.done
-  else
-    echo "failed"
-    tail step4.log
-    touch step4.fail
+    # run step 4
+    echo -n "# running step4... "
+    if cmsRun step4.py >& step4.log; then
+      echo "done"
+      touch step4.done
+    else
+      echo "failed"
+      tail step4.log
+      touch step4.fail
+    fi
   fi
 
   # (optional) run profile
@@ -492,8 +505,9 @@ function upload_artefacts() {
   report "  - $RELEASE release, workflow $WORKFLOW"
 
   # check the artefacts to look for and upload
-  NAMES=step3
-  [ -f $CWD/.has_profiling ] && NAMES="$NAMES profile"
+  NAMES=
+  [ -f $CWD/step3.py ]   && NAMES="$NAMES step3"
+  [ -f $CWD/profile.py ] && NAMES="$NAMES profile"
 
   for NAME in $NAMES; do
     local FILE=$CWD/$NAME
@@ -503,12 +517,6 @@ function upload_artefacts() {
     copy_if_exists ${FILE}.log     $LOCAL_DIR/${PART}.log
     copy_if_exists ${FILE}.nvvp    $LOCAL_DIR/${PART}.nvvp
     copy_if_exists ${FILE}.profile $LOCAL_DIR/${PART}.profile
-    # update the report
-    if ! [ -f ${FILE}.py ]; then
-      # the workflow has not been created
-      report "      - :x: ${NAME}.py: the python configuration was not created, see the full log for more information"
-      continue
-    fi
     if ! [ -f ${FILE}.log ]; then
       # if there is no log file, the workflow most likely did not run at all
       report "      - :x: [${NAME}.py]($UPLOAD_URL/${PART}.py): log, profile and summary are **missing**, see the full log for more information"
