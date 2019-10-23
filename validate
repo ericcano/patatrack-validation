@@ -249,6 +249,7 @@ process.MessageLogger.categories.append("CUDAService")
 process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
 @EOF
+        touch .scan_profile
       fi
 
       if has_memcheck $WORKFLOW; then
@@ -316,6 +317,10 @@ function run_workflow() {
       echo "failed"
       tail profile.log
       touch profile.fail
+    fi
+    if [ -f .scan_profile ] && ! [ -f profile.fail ]; then
+      echo -n "# scanning profile... "
+      $BASE/patatrack-scripts/scan profile.py
     fi
   fi
 
@@ -684,6 +689,9 @@ upload_report $ISSUE_NUMBER $COMMENT_ID
 # compute a unique hash for this validation run
 JOBID=$({ echo $SCRIPTHASH; cat $(apply_and_glob "$BASE/%/hash" $DIRECTORIES); } | sha1sum | cut -d' ' -f1)
 echo $JOBID > $BASE/jobid
+
+# download the benchmark scripts
+git clone git@github.com:cms-patatrack/patatrack-scripts.git $BASE/patatrack-scripts
 
 # run the workflows
 run_workflows_in_parallel $DIRECTORIES
