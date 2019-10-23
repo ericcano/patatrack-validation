@@ -9,11 +9,16 @@ source $VO_CMS_SW_DIR/cmsset_default.sh
 THREADS=8
 STREAMS=8
 
-# runTheMatrix workflows
+# runTheMatrix MC workflows
 REFERENCE_WORKFLOW="10824.5"
 WORKFLOWS="10824.5 10824.51 10824.52"
-PROFILING="10824.52"
-MEMCHECKS="10824.52"
+
+# runTheMatrix data Workflows
+DATA_WORKFLOWS="136.86452"
+
+# Enable profiling and memcheck for selected workflows
+PROFILING="10824.52 136.86452"
+MEMCHECKS="10824.52 136.86452"
 
 # Default number of events (overridden with sample-specific values in input.sh)
 NUMEVENTS=100
