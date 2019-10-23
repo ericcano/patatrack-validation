@@ -471,7 +471,7 @@ function make_validation_plots() {
   cd $BASE/$DIRNAME
   eval $(scram runtime -sh)
 
-  report "### \`makeTrackValidationPlots.py\` plots"
+  report "## Validation plots"
 
   local SAMPLE
   for SAMPLE in $SAMPLES; do
@@ -489,15 +489,17 @@ function make_validation_plots() {
     local RELEASE
     for RELEASE in ${TESTING_RELEASES[@]}; do
       local WORKFLOW
-      for WORKFLOW in $WORKFLOWS; do
+      for WORKFLOW in $WORKFLOWS $DATA_WORKFLOWS; do
         local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/$DQMFILE
         [ -f $FILE ] && ln -s $FILE ${RELEASE}-${WORKFLOW}.root
+        FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/scan.csv
+        [ -f $FILE ] && ln -s $FILE ${RELEASE}-${WORKFLOW}.csv
       done
     done
 
     # validation of all workflows across all releases
     local WORKFLOW
-    for WORKFLOW in $WORKFLOWS; do
+    for WORKFLOW in $WORKFLOWS $DATA_WORKFLOWS; do
       mkdir -p $LOCAL_DIR/$JOBID/$WORKDIR/$WORKFLOW
       if [ "$WORKFLOW" == "$REFERENCE_WORKFLOW" ]; then
         # reference workflow
@@ -508,7 +510,7 @@ function make_validation_plots() {
           --outputDir $LOCAL_DIR/$JOBID/$WORKDIR/$REFERENCE_WORKFLOW \
           ${RELEASES[@]/%/-${REFERENCE_WORKFLOW}.root}
         report "  - tracking validation [plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) and [summary]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/plots_summary.html) for workflow $WORKFLOW"
-      else
+      elif has_validate $WORKFLOW; then
         # other workflows
         local FILES=""
         local RELEASE
@@ -527,6 +529,58 @@ function make_validation_plots() {
           report "  - tracking validation [plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) and [summary]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/plots_summary.html) for workflow $WORKFLOW"
         else
           report "  - :warning: tracking validation plots and summary for workflow $WORKFLOW are **missing**"
+        fi
+      fi
+    done
+    report
+  done
+}
+
+# Make throughput plots, based on the scan of the benchmark of the profile,
+# and upload them to the EOS www area.
+#
+# Usage:
+#   make_throughput_plots REFERENCE_RELEASE [[RELEASE ...] TARGET_RELEASE]
+#
+function make_throughput_plots() {
+  [ "$1" ] || return 1
+  local DIRNAME="${!#}"
+  local REFERENCE_RELEASE="$1"
+  local -a RELEASES=("$@")
+  shift
+  local -a TESTING_RELEASES=($@)
+  cd $BASE/$DIRNAME
+  eval $(scram runtime -sh)
+
+  report "## Throughput plots"
+
+  local SAMPLE
+  for SAMPLE in $DATA_SAMPLES; do
+    local DATASET=${!SAMPLE}
+    report "#### $DATASET"
+    local WORKDIR=$(echo $DATASET | cut -d/ -f 2-3 --output-delimiter=-)
+    mkdir -p $BASE/plots/$WORKDIR
+    cd $BASE/plots/$WORKDIR
+
+    # throughput of all workflows across all development releases
+    local WORKFLOW
+    for WORKFLOW in $DATA_WORKFLOWS; do
+      mkdir -p $LOCAL_DIR/$JOBID/$WORKDIR/$WORKFLOW
+      if has_profiling $WORKFLOW; then
+        local FILES=""
+        local RELEASE
+        for RELEASE in ${TESTING_RELEASES[@]}; do
+          local FILE=$BASE/$RELEASE/run/$WORKDIR/$WORKFLOW/scan.csv
+          if [ -f $FILE ]; then
+            ln -s $FILE ${RELEASE}-${WORKFLOW}.csv
+            FILES="$FILES ${RELEASE}-${WORKFLOW}.csv"
+          fi
+        done
+        if [ "$FILES" ]; then
+          $BASE/patatrack-scripts/plot_scan.py $FILES && mv plot.png $LOCAL_DIR/$JOBID/$WORKDIR/scan-${WORKFLOW}.png
+          # Note: the GitHub API does not support uploading files; the link will be dangling until
+          # the plots are updloaded
+          report "![plot]($UPLOAD_URL/$JOBID/$WORKDIR/scan-${WORKFLOW}.png)"
         fi
       fi
     done
@@ -579,7 +633,7 @@ function upload_artefacts() {
       FLAG=":heavy_check_mark:"
     else
       FLAG=":x:"
-    fi 
+    fi
     # check for both profile and summary
     if [ -f ${FILE}.nvvp ] && [ -f ${FILE}.profile ]; then
       report "      - ${FLAG} [${NAME}.py]($UPLOAD_URL/${PART}.py): [log]($UPLOAD_URL/${PART}.log), [visual profile]($UPLOAD_URL/${PART}.nvvp) and [summary]($UPLOAD_URL/${PART}.profile)"
@@ -650,7 +704,7 @@ function upload_profiles() {
   shift
   local -a TESTING_RELEASES=($@)
 
-  report "### logs and \`nvprof\`/\`nvvp\` profiles"
+  report "## logs and \`nvprof\`/\`nvvp\` profiles"
 
   local SAMPLE
   for SAMPLE in $SAMPLES; do
@@ -665,7 +719,7 @@ function upload_profiles() {
     local RELEASE
     for RELEASE in ${TESTING_RELEASES[@]}; do
       local WORKFLOW
-      for WORKFLOW in $WORKFLOWS; do
+      for WORKFLOW in $WORKFLOWS $DATA_WORKFLOWS; do
         upload_artefacts $RELEASE $WORKDIR $WORKFLOW
       done
     done
@@ -738,12 +792,17 @@ echo $JOBID > $BASE/jobid
 
 # download the benchmark scripts
 git clone git@github.com:cms-patatrack/patatrack-scripts.git $BASE/patatrack-scripts
+# change the color palette used to plot the throughpit scans to match the "development" and "testing" releases
+sed -e'/kRed\|kBlue/d' -i $BASE/patatrack-scripts/plot_scan.py
 
 # run the workflows
 run_workflows_in_parallel $DIRECTORIES
 upload_report $ISSUE_NUMBER $COMMENT_ID
 # make validation plots
 make_validation_plots $DIRECTORIES
+upload_report $ISSUE_NUMBER $COMMENT_ID
+# make throughput plots
+make_throughput_plots $DIRECTORIES
 upload_report $ISSUE_NUMBER $COMMENT_ID
 # upload DQM plots to the GUI
 #upload_dqm_plots $DIRECTORIES
