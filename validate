@@ -98,52 +98,54 @@ function build_matrix() {
       echo "# prepare workflow $WORKFLOW"
       $STEP3 $INPUT --no_exec --python_filename=step3.py
       $STEP4        --no_exec --python_filename=step4.py
-      # add the NVProfilerService to profile, and show CUDAService messages
-      sed -i step3.py -e '/\# End of customisation functions/i \
-# Mark CMSSW transitions and modules in the nvprof profile\
-from FWCore.ParameterSet.Utilities import moduleLabelsInSequences\
-process.NVProfilerService = cms.Service("NVProfilerService",\
-    highlightModules = cms.untracked.vstring( moduleLabelsInSequences(process.reconstruction_step) ),\
-    showModulePrefetching = cms.untracked.bool( False )\
-)\
-\
-# Show CUDAService messages\
-process.MessageLogger.categories.append("CUDAService")\
-'
-      echo >> step3.py
-      echo "# Configure multithreading" >> step3.py
-      echo "process.options.numberOfThreads = cms.untracked.uint32( $THREADS )" >> step3.py
-      echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> step3.py
+      # show CUDAService messages and configure multithreading
+      cat >> step3.py << @EOF
 
-      local CUSTOMISE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
-      if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${CUSTOMISE}.py ] || [ -f $CMSSW_BASE/python/${CUSTOMISE}.py ] ); then
+# Show CUDAService messages
+process.MessageLogger.categories.append("CUDAService")
+
+# Configure multithreading
+process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
+process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
+@EOF
+
+      local PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
+      local PROFILING_FUNC=customizePixelTracksForProfilingGPUOnly
+      if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${PROFILING_FILE}.py ] || [ -f $CMSSW_BASE/python/${PROFILING_FILE}.py ] ); then
         # mark the workflow to run the profiling job
         touch .has_profiling
         # create a profiling workflow
-        $STEP3 $INPUT --no_exec --customise ${CUSTOMISE}.customizePixelTracksForProfilingGPUOnly --python_filename=profile.py
-        # add the NVProfilerService to profile, and show CUDAService messages
-        sed -i profile.py -e '/\# End of customisation functions/i \
-# Mark CMSSW transitions and modules in the nvprof profile\
-from FWCore.ParameterSet.Utilities import moduleLabelsInSequences\
-process.NVProfilerService = cms.Service("NVProfilerService",\
-    highlightModules = cms.untracked.vstring( moduleLabelsInSequences(process.reconstruction_step) ),\
-    showModulePrefetching = cms.untracked.bool( False )\
-)\
-\
-# Show CUDAService messages\
-process.MessageLogger.categories.append("CUDAService")\
-'
-        echo >> profile.py
-        echo "# Configure multithreading" >> profile.py
-        echo "process.options.numberOfThreads = cms.untracked.uint32( $THREADS )" >> profile.py
-        echo "process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )" >> profile.py
+        $STEP3 $INPUT --no_exec --customise_unsch ${PROFILING_FILE}.${PROFILING_FUNC} --python_filename=profile.py
+        # add the NVProfilerService to profile, show CUDAService messages and configure multithreading
+        cat >> profile.py << @EOF
+
+# Mark CMSSW transitions and modules in the nvprof profile
+from FWCore.ParameterSet.Utilities import moduleLabelsInSequences
+process.NVProfilerService = cms.Service("NVProfilerService",
+    highlightModules = cms.untracked.vstring( moduleLabelsInSequences(process.reconstruction_step) ),
+    showModulePrefetching = cms.untracked.bool( False )
+)
+
+# Show CUDAService messages
+process.MessageLogger.categories.append("CUDAService")
+
+# Configure multithreading
+process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
+process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
+@EOF
       fi
 
       if has_memcheck $WORKFLOW; then
         # prepare the workflow to run the various cuda-memcheck checks
         cp step3.py memcheck.py
         (( MEMCHECK_NUMEVENTS )) || local MEMCHECK_NUMEVENTS=10
-        echo -e "\n# set the number of events for the memcheck workflows\nprocess.maxEvents = cms.untracked.PSet(\n    input = cms.untracked.int32($MEMCHECK_NUMEVENTS)\n)" >> memcheck.py
+        cat >> memcheck.py << @EOF
+
+# Set the number of events for the memcheck workflows
+process.maxEvents = cms.untracked.PSet(
+    input = cms.untracked.int32($MEMCHECK_NUMEVENTS)
+)
+@EOF
       fi
 
       cd ..
@@ -517,7 +519,7 @@ function upload_log_files() {
   local -a RELEASES=("$@")
 
   cp $BASE/log $LOCAL_DIR/$JOBID/log
-  report "### Logs"
+  report "## Logs"
   report "The full log is available at $UPLOAD_URL/$JOBID/log ."
 }
 
@@ -531,7 +533,7 @@ for ISSUE_NUMBER in "$@"; do true; done
 COMMENT_ID=$(can_post_comment $ISSUE_NUMBER && $EDIT_COMMENT && upload_report $ISSUE_NUMBER) || true
 
 # set up the reference release
-report "### Validation summary"
+report "## Validation summary"
 setup_release "reference" CMSSW_11_0_0_pre7
 report "Reference release [CMSSW_11_0_0_pre7](https://github.com/cms-sw/cmssw/tree/CMSSW_11_0_0_pre7) at $(< $BASE/reference/hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
