@@ -164,7 +164,7 @@ process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32( 1 )
 @EOF
         if echo ${MY_GLOBALTAG} | grep -q realistic; then
           # use cuts for "realistic" conditions
-          cat >> step3.py << @EOF
+          cat >> profile.py << @EOF
 
 # Use "realistic" cuts
 if 'caHitNtupletCUDA' in process.__dict__:
@@ -172,7 +172,7 @@ if 'caHitNtupletCUDA' in process.__dict__:
 @EOF
         else
           # use cuts for "design" conditions
-          cat >> step3.py << @EOF
+          cat >> profile.py << @EOF
 
 # Use "design" cuts
 if 'caHitNtupletCUDA' in process.__dict__:
@@ -356,7 +356,8 @@ function run_workflow() {
   # (optional) run profile
   if [ -f profile.py ]; then
     echo -n "# running profile... "
-    if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
+    #if nvprof -f -o profile.nvvp -s --log-file profile.profile -- cmsRun profile.py >& profile.log; then
+    if cmsRun profile.py >& profile.log; then
       echo "done"
       touch profile.done
     else
