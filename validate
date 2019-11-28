@@ -122,3 +122,6 @@ if ! hostname | grep -q '\.cern\.ch'; then
   echo "Please upload the plots and reports with:"
   echo "  rsync -arvzz $LOCAL_DIR/$JOBID lxplus.cern.ch:$UPLOAD_DIR/"
 fi
+
+# mark the validation as complete
+touch "$LOCAL_DIR/$JOBID/done"
