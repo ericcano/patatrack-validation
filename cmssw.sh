@@ -76,7 +76,7 @@ function setup_development_release() {
   # check out any packages that are different from the release and their dependencies,
   # and build them
   if ! git diff --quiet $CMSSW_VERSION; then
-    git cms-addpkg $(git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u)
+    git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u | xargs -r git cms-addpkg || true
     git cms-checkdeps -a
     USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
   fi
