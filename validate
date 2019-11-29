@@ -49,15 +49,15 @@ COMMENT_ID=$(can_post_comment $ISSUE_NUMBER && $EDIT_COMMENT && upload_report $I
 
 # set up the reference release
 report "## Validation summary"
-setup_release "reference" CMSSW_11_0_0_pre11
-report "Reference release [CMSSW_11_0_0_pre11](https://github.com/cms-sw/cmssw/tree/CMSSW_11_0_0_pre11) at $(< $BASE/reference/hash)"
+setup_release "reference" $REFERENCE_RELEASE
+report "Reference release [$REFERENCE_RELEASE](https://github.com/cms-sw/cmssw/tree/$REFERENCE_RELEASE) at $(< $BASE/reference/hash)"
 build_matrix "reference" "$REFERENCE_WORKFLOW"
 DIRECTORIES="reference"
 upload_report $ISSUE_NUMBER $COMMENT_ID
 
 # set up the current development branch
-setup_development_release "development" CMSSW_11_0_0_pre11_Patatrack CMSSW_11_0_X_Patatrack $REPOSITORY
-report "Development branch [CMSSW_11_0_X_Patatrack](https://github.com/$REPOSITORY/cmssw/tree/CMSSW_11_0_X_Patatrack) at $(< $BASE/development/hash)"
+setup_development_release "development" $DEVELOPMENT_RELEASE $DEVELOPMENT_BRANCH $REPOSITORY
+report "Development branch [$REPOSITORY/$DEVELOPMENT_BRANCH](https://github.com/$REPOSITORY/cmssw/tree/$DEVELOPMENT_BRANCH) at $(< $BASE/development/hash)"
 build_matrix "development" "$WORKFLOWS"
 build_data_matrix "development" "$DATA_WORKFLOWS"
 DIRECTORIES+=" development"

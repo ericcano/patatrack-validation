@@ -5,21 +5,28 @@
 export SCRAM_ARCH=slc7_amd64_gcc820
 source $VO_CMS_SW_DIR/cmsset_default.sh
 
+# Reference release
+REFERENCE_RELEASE=CMSSW_11_0_0_pre12
+
+# Development branch and latest release
+DEVELOPMENT_BRANCH=CMSSW_11_0_X_Patatrack
+DEVELOPMENT_RELEASE=CMSSW_11_0_0_pre12_Patatrack
+
 # Number of threads and streams used in each job
 THREADS=8
 STREAMS=8
 
 # runTheMatrix MC workflows
 REFERENCE_WORKFLOW="10824.5"
-WORKFLOWS="10824.5 10824.51 10824.52"
+WORKFLOWS="10824.5 11024.501 11024.502"
 
 # runTheMatrix data Workflows
-DATA_WORKFLOWS="136.86452"
+DATA_WORKFLOWS="136.885502"
 
 # Enable profiling and memcheck for selected workflows
-VALIDATE="10824.5 10824.51 10824.52"
-PROFILING="10824.52 136.86452"
-MEMCHECKS="10824.52"
+VALIDATE="10824.5 11024.501 11024.502"
+PROFILING="11024.502 136.885502"
+MEMCHECKS="11024.502"
 
 # Default number of events (overridden with sample-specific values in input.sh)
 NUMEVENTS=100
