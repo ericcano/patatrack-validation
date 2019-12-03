@@ -8,12 +8,12 @@ FastMonitoringService = cms.Service( "FastMonitoringService",
 )
 
 EvFDaqDirector = cms.Service( "EvFDaqDirector",
-    runNumber = cms.uint32( 323775 ),
+    runNumber = cms.untracked.uint32( 323775 ),
 
-    baseDir = cms.string( "tmp" ),
-    buBaseDir = cms.string( "tmp" ),
+    baseDir = cms.untracked.string( "tmp" ),
+    buBaseDir = cms.untracked.string( "tmp" ),
 
-    useFileBroker = cms.bool( False ),
+    useFileBroker = cms.untracked.bool( False ),
     fileBrokerKeepAlive = cms.untracked.bool( True ),
     fileBrokerPort = cms.untracked.string( "8080" ),
     fileBrokerUseLocalLock = cms.untracked.bool( True ),
