@@ -86,7 +86,7 @@ JOBID=$({ echo $SCRIPTHASH; cat $(apply_and_glob "$BASE/%/hash" $DIRECTORIES); }
 echo $JOBID > $BASE/jobid
 
 # download the benchmark scripts
-git clone git@github.com:cms-patatrack/patatrack-scripts.git $BASE/patatrack-scripts
+git clone https://github.com/cms-patatrack/patatrack-scripts.git $BASE/patatrack-scripts
 # change the color palette used to plot the throughpit scans to match the "development" and "testing" releases
 sed -e'/kRed\|kBlue/d' -i $BASE/patatrack-scripts/plot_scan.py
 
