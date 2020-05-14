@@ -63,11 +63,14 @@ build_data_matrix "development" "$DATA_WORKFLOWS"
 DIRECTORIES+=" development"
 upload_report $ISSUE_NUMBER $COMMENT_ID
 
+# consider only PRs (not issues)
+PRS=$(filter_PRs "$@")
+
 # set up the development branch plus the PR(s) to be tested
-if [ "$*" ]; then
+if [ "$PRS" ]; then
   clone_release "development" "testing"
   report "Testing PRs:"
-  for PR in "$@"; do
+  for PR in $PRS; do
     git cms-merge-topic "$REPOSITORY:$PR"
     echo $PR >> $BASE/testing/PRs
     report "  - #$PR at $(git rev-parse --short=12 "$REPOSITORY/refs/pull/$PR/head")"

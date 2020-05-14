@@ -122,3 +122,19 @@ function upload_report() {
   rm -f $JSON
 }
 
+function is_PR() {
+  local PR="$1"
+  # check for a numerical (decimal) value
+  [ "$(echo "$PR" | sed -e's/^[1-9][0-9]*//')" ] && return 1
+  # check for a valid issue which is also a pull request
+  curl -s -S -H "Authorization: token $OAUTH_TOKEN" -X "GET" "https://api.github.com/repos/cms-patatrack/cmssw/issues/$PR" | grep -q "pull_request"
+}
+
+function filter_PRs() {
+  local PR=
+  for PR in "$@"; do
+    if is_PR $PR; then
+      echo $PR
+    fi
+  done
+}
