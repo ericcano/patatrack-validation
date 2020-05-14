@@ -11,7 +11,7 @@ EvFDaqDirector = cms.Service( "EvFDaqDirector",
     runNumber = cms.untracked.uint32( 323775 ),
 
     baseDir = cms.untracked.string( "tmp" ),
-    buBaseDir = cms.untracked.string( "tmp" ),
+    buBaseDir = cms.untracked.string( "/gpu_data/store/data/Run2018D/EphemeralHLTPhysics/FED/v1" ),
 
     useFileBroker = cms.untracked.bool( False ),
     fileBrokerKeepAlive = cms.untracked.bool( True ),
