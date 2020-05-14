@@ -83,7 +83,7 @@ process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
 process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32( 1 )
 @EOF
-        if echo ${MY_GLOBALTAG} | grep -q realistic; then
+        if echo ${MY_GLOBALTAG} | grep -q 2018_realistic; then
           # use cuts for "realistic" conditions
           cat >> step3.py << @EOF
 
@@ -125,7 +125,7 @@ process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
 process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32( 1 )
 @EOF
-        if echo ${MY_GLOBALTAG} | grep -q realistic; then
+        if echo ${MY_GLOBALTAG} | grep -q 2018_realistic; then
           # use cuts for "realistic" conditions
           cat >> profile.py << @EOF
 
