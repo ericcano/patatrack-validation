@@ -105,6 +105,7 @@ function clone_release() {
   cd "$TARGET"/src
   scram b ProjectRename
   eval $(scram runtime -sh)
+  git config --local commit.gpgsign false
   echo
 }
 
