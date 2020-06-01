@@ -1,4 +1,4 @@
-#! /bin/bash -e
+#! /bin/bash -ex
 
 # Script for testing one or more pull requests against a reference release and an intermediate development release
 #
@@ -30,7 +30,8 @@ source validate.sh
 SCRIPTHASH=$(cat $VALIDATION/*.sh ${BASH_SOURCE[0]} | sha1sum | cut -d' ' -f1)
 
 # Create a temporay working directory
-BASE=$(mktemp -d -p $PWD run.XXXXXXXXXX)
+function join_args() { local IFS=_; echo "$*"; }
+BASE=$(mktemp -d -p $PWD $(join_args run "$@").XXXXXXXXXX)
 [ -d $BASE ] || exit 1
 REPORT=$BASE/report.md
 
@@ -71,8 +72,8 @@ if [ "$PRS" ]; then
   clone_release "development" "testing"
   report "Testing PRs:"
   for PR in $PRS; do
-    git cms-merge-topic "$REPOSITORY:$PR"
     echo $PR >> $BASE/testing/PRs
+    git cms-merge-topic "$REPOSITORY:$PR"
     report "  - #$PR at $(git rev-parse --short=12 "$REPOSITORY/refs/pull/$PR/head")"
   done
   git rev-parse --short=12 HEAD > ../hash
