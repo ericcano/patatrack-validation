@@ -20,15 +20,21 @@ STREAMS=8
 
 # runTheMatrix MC workflows
 REFERENCE_WORKFLOW="10824.5"
-WORKFLOWS="10824.5 10824.501 10824.502"
+WORKFLOWS="10824.5 10824.501 10824.502 10824.511 10824.512"
 
 # runTheMatrix data Workflows
-DATA_WORKFLOWS="136.885502"
+DATA_WORKFLOWS="136.885502 136.885512"
 
 # Enable profiling and memcheck for selected workflows
-VALIDATE="10824.5 10824.501 10824.502"
-PROFILING="10824.502 136.885502"
-MEMCHECKS="10824.502"
+VALIDATE="10824.5 10824.501 10824.502 10824.511 10824.512"
+PIXEL_PROFILING="10824.502 136.885502"
+PIXEL_PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
+PIXEL_PROFILING_FUNC=customizePixelTracksForProfilingGPUOnly
+ECAL_PROFILING="10824.512 136.885512"
+ECAL_PROFILING_FILE=RecoLocalCalo/Configuration/customizeEcalOnlyForProfiling
+ECAL_PROFILING_FUNC=customizeEcalOnlyForProfilingGPUOnly
+PROFILING="$PIXEL_PROFILING $ECAL_PROFILING"
+MEMCHECKS="10824.502 10824.512"
 
 # Default number of events (overridden with sample-specific values in input.sh)
 NUMEVENTS=100
@@ -36,6 +42,20 @@ NUMEVENTS=100
 # Number of events for the memcheck workflows
 MEMCHECK_NUMEVENTS=10
 
+
+function get_profiling_file() {
+  local WORKFLOW="$1"
+  [ "$WORKFLOW" ] || return
+  echo "$PIXEL_PROFILING" | grep -q -w "$WORKFLOW" && echo "$PIXEL_PROFILING_FILE"
+  echo "$ECAL_PROFILING"  | grep -q -w "$WORKFLOW" && echo "$ECAL_PROFILING_FILE"
+}
+
+function get_profiling_function() {
+  local WORKFLOW="$1"
+  [ "$WORKFLOW" ] || return
+  echo "$PIXEL_PROFILING" | grep -q -w "$WORKFLOW" && echo "$PIXEL_PROFILING_FUNC"
+  echo "$ECAL_PROFILING"  | grep -q -w "$WORKFLOW" && echo "$ECAL_PROFILING_FUNC"
+}
 
 function setup_release() {
   local DIRNAME="$1"

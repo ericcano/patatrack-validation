@@ -102,8 +102,8 @@ if 'caHitNtupletCUDA' in process.__dict__:
         fi
       fi
 
-      local PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
-      local PROFILING_FUNC=customizePixelTracksForProfilingGPUOnly
+      local PROFILING_FILE=$(get_profiling_file $WORKFLOW)
+      local PROFILING_FUNC=$(get_profiling_function $WORKFLOW)
       if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${PROFILING_FILE}.py ] || [ -f $CMSSW_BASE/python/${PROFILING_FILE}.py ] ); then
         # create a profiling workflow
         $STEP3 $INPUT --no_exec --customise_unsch ${PROFILING_FILE}.${PROFILING_FUNC} --python_filename=profile.py
@@ -226,8 +226,8 @@ if 'caHitNtupletCUDA' in process.__dict__:
 @EOF
       fi
 
-      local PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
-      local PROFILING_FUNC=customizePixelTracksForProfilingGPUOnly
+      local PROFILING_FILE=$(get_profiling_file $WORKFLOW)
+      local PROFILING_FUNC=$(get_profiling_function $WORKFLOW)
       if has_profiling $WORKFLOW && ( [ -f $CMSSW_RELEASE_BASE/python/${PROFILING_FILE}.py ] || [ -f $CMSSW_BASE/python/${PROFILING_FILE}.py ] ); then
         # create a profiling workflow
         $STEP3 $INPUT --no_exec --customise_unsch ${PROFILING_FILE}.${PROFILING_FUNC} --python_filename=profile.py
