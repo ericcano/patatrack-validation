@@ -73,11 +73,18 @@ if [ "$PRS" ]; then
   report "Testing PRs:"
   for PR in $PRS; do
     echo $PR >> $BASE/testing/PRs
-    git cms-merge-topic "$REPOSITORY:$PR"
+    git cms-merge-topic -u "$REPOSITORY:$PR"
     report "  - #$PR at $(git rev-parse --short=12 "$REPOSITORY/refs/pull/$PR/head")"
   done
   git rev-parse --short=12 HEAD > ../hash
-  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
+
+  # check out all modified packages ...
+  git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u | xargs -r git cms-addpkg || true
+  # ... and their dependencies
+  git cms-checkdeps -a
+  # checkout all packages containing CUDA code, and rebuild all checked out packages with debug symbols
+  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" cmsCudaRebuild.sh
+
   build_matrix "testing" "$WORKFLOWS"
   build_data_matrix "testing" "$DATA_WORKFLOWS"
   DIRECTORIES+=" testing"

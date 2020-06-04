@@ -81,10 +81,7 @@ function setup_development_release() {
   local BRANCH="$3"
   local REPOSITORY="$4"
 
-  # this should be detected ...
-  local NEED_CUDA_REBUILD=false
-
-  # set up the reference area
+  # set up a development area
   cd "$BASE"
   echo "# set up $DIRNAME environment for release $RELEASE"
   scram project -n $DIRNAME CMSSW $RELEASE
@@ -94,22 +91,20 @@ function setup_development_release() {
   git cms-init -x $REPOSITORY --upstream-only
   # <add here any required pull request or external update>
   git checkout $REPOSITORY/$BRANCH -b $BRANCH
-  # if the CUDA architecture on the local machine is not supported by the release,
-  # reconfigure CUDA and rebuild all CUDA packages
-  if $NEED_CUDA_REBUILD; then
-    # configure the cuda tool for the devices present on the local system
-    cmsCudaSetup.sh
-    # rebuild all packages containing CUDA code
-    USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" cmsCudaRebuild.sh
-  fi
-  # check out any packages that are different from the release and their dependencies,
-  # and build them
-  if ! git diff --quiet $CMSSW_VERSION; then
-    git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u | xargs -r git cms-addpkg || true
-    git cms-checkdeps -a
-    USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
-  fi
   git rev-parse --short=12 HEAD > ../hash
+
+  # configure the cuda tool for the devices present on the local system
+  cmsCudaSetup.sh
+  # check if there are any differences with respect to the base release
+  if ! git diff --quiet $CMSSW_VERSION; then
+    # check out all modified packages ...
+    git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u | xargs -r git cms-addpkg || true
+    # ... and their dependencies
+    git cms-checkdeps -a
+  fi
+  # checkout all packages containing CUDA code, and rebuild all checked out packages with debug symbols
+  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" cmsCudaRebuild.sh
+
   if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
     echo "# update $DIRNAME environment on branch $BRANCH with"
     git log --oneline --reverse --no-decorate ${RELEASE}..
