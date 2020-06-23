@@ -18,23 +18,23 @@ DEVELOPMENT_RELEASE=CMSSW_11_1_0_pre8_Patatrack
 THREADS=8
 STREAMS=8
 
-# runTheMatrix MC workflows
-REFERENCE_WORKFLOW="10824.5"
-WORKFLOWS="10824.5 10824.501 10824.502 10824.511 10824.512"
+# runTheMatrix MC workflows (Run 3, 2021 relistic conditions)
+REFERENCE_WORKFLOW="11634.5"
+WORKFLOWS="11634.5 11634.501 11634.502 11634.511 11634.512"
 
-# runTheMatrix data Workflows
+# runTheMatrix data Workflows (Run 2, 2018)
 DATA_WORKFLOWS="136.885502 136.885512"
 
 # Enable profiling and memcheck for selected workflows
-VALIDATE="10824.5 10824.501 10824.502 10824.511 10824.512"
-PIXEL_PROFILING="10824.502 136.885502"
+VALIDATE="11634.5 11634.501 11634.502 11634.511 11634.512"
+PIXEL_PROFILING="11634.502 136.885502"
 PIXEL_PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
 PIXEL_PROFILING_FUNC=customizePixelTracksForProfilingGPUOnly
-ECAL_PROFILING="10824.512 136.885512"
+ECAL_PROFILING="11634.512 136.885512"
 ECAL_PROFILING_FILE=RecoLocalCalo/Configuration/customizeEcalOnlyForProfiling
 ECAL_PROFILING_FUNC=customizeEcalOnlyForProfilingGPUOnly
 PROFILING="$PIXEL_PROFILING $ECAL_PROFILING"
-MEMCHECKS="10824.502 10824.512"
+MEMCHECKS="11634.502 11634.512"
 
 # Default number of events (overridden with sample-specific values in input.sh)
 NUMEVENTS=100
@@ -68,10 +68,20 @@ function setup_release() {
   eval $(scram runtime -sh)
   git cms-init --upstream-only
   echo
+
   # <add here any required pull request or external update>
-  #git cms-addpkg HeterogeneousCore
-  #USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
+  git cms-merge-topic 30339
+
   git rev-parse --short=12 HEAD > ../hash
+  # check if there are any differences with respect to the base release
+  if ! git diff --quiet $CMSSW_VERSION; then
+    # check out all modified packages ...
+    git diff $CMSSW_VERSION --name-only | cut -d/ -f-2 | sort -u | xargs -r git cms-addpkg || true
+    # ... and their dependencies ...
+    git cms-checkdeps -a
+    # and rebuild all checked out packages with debug symbols
+    USER_CXXFLAGS="-g" USER_CUDA_FLAGS="-g -lineinfo" scram b -j
+  fi
   echo
 }
 
@@ -103,7 +113,7 @@ function setup_development_release() {
     git cms-checkdeps -a
   fi
   # checkout all packages containing CUDA code, and rebuild all checked out packages with debug symbols
-  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" cmsCudaRebuild.sh
+  USER_CXXFLAGS="-g" USER_CUDA_FLAGS="-g -lineinfo" cmsCudaRebuild.sh
 
   if [ $(git rev-parse $RELEASE) != $(git rev-parse HEAD) ]; then
     echo "# update $DIRNAME environment on branch $BRANCH with"
