@@ -67,6 +67,7 @@ function setup_release() {
   cd $DIRNAME/src
   eval $(scram runtime -sh)
   git cms-init --upstream-only
+  git config --local commit.gpgsign false
   echo
 
   # <add here any required pull request or external update>
@@ -99,6 +100,7 @@ function setup_development_release() {
   eval $(scram runtime -sh)
   # git needs some special care
   git cms-init -x $REPOSITORY --upstream-only
+  git config --local commit.gpgsign false
   # <add here any required pull request or external update>
   git checkout $REPOSITORY/$BRANCH -b $BRANCH
   git rev-parse --short=12 HEAD > ../hash
