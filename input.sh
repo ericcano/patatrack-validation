@@ -1,5 +1,5 @@
 # Default global tag and number of events
-GLOBALTAG="110X_mcRun3_2021_realistic_v6"
+GLOBALTAG="111X_mcRun3_2021_realistic_v4"
 NUMEVENTS=100
 
 # Datasets used as input for the matrix-like tests
