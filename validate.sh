@@ -24,6 +24,11 @@ function has_validate() {
   echo "$VALIDATE" | grep -q -w "$WORKFLOW"
 }
 
+function has_pixel_validation() {
+  local WORKFLOW=$1
+  echo "$PIXEL_VALIDATION" | grep -q -w "$WORKFLOW"
+}
+
 function has_profiling() {
   local WORKFLOW=$1
   echo "$PROFILING" | grep -q -w "$WORKFLOW"
@@ -68,12 +73,11 @@ function build_matrix() {
       local STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
       local STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --filein file:step3_inDQM.root"
 
-      if has_validate $WORKFLOW; then
-        echo "# prepare workflow $WORKFLOW"
-        $STEP3 $INPUT --no_exec --python_filename=step3.py
-        $STEP4        --no_exec --python_filename=step4.py
-        # show CUDAService messages and configure multithreading
-        cat >> step3.py << @EOF
+      echo "# prepare workflow $WORKFLOW"
+      $STEP3 $INPUT --no_exec --python_filename=step3.py
+      $STEP4        --no_exec --python_filename=step4.py
+      # show CUDAService messages and configure multithreading
+      cat >> step3.py << @EOF
 
 # Show CUDAService messages
 process.MessageLogger.categories.append("CUDAService")
@@ -83,23 +87,22 @@ process.options.numberOfThreads = cms.untracked.uint32( $THREADS )
 process.options.numberOfStreams = cms.untracked.uint32( $STREAMS )
 process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32( 1 )
 @EOF
-        if echo ${MY_GLOBALTAG} | grep -q 2018_realistic; then
-          # use cuts for "realistic" conditions
-          cat >> step3.py << @EOF
+      if echo ${MY_GLOBALTAG} | grep -q 2018_realistic; then
+        # use cuts for "realistic" conditions
+        cat >> step3.py << @EOF
 
 # Use "realistic" cuts
 if 'caHitNtupletCUDA' in process.__dict__:
   process.caHitNtupletCUDA.idealConditions = False
 @EOF
-        else
-          # use cuts for "design" conditions
-          cat >> step3.py << @EOF
+      else
+        # use cuts for "design" conditions
+        cat >> step3.py << @EOF
 
 # Use "design" cuts
 if 'caHitNtupletCUDA' in process.__dict__:
   process.caHitNtupletCUDA.idealConditions = True
 @EOF
-        fi
       fi
 
       local PROFILING_FILE=$(get_profiling_file $WORKFLOW)
@@ -200,12 +203,11 @@ function build_data_matrix() {
       local STEP3="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step3' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --fileout file:step3.root"
       local STEP4="$(runTheMatrix.py -n -e -l $WORKFLOW | grep 'cmsDriver.py step4' | cut -d: -f2- | sed -e"s/^ *//" -e"s/ \+--conditions *[^ ]\+/ --conditions $MY_GLOBALTAG/" -e"s/ \+-n *[^ ]\+/ -n $MY_NUMEVENTS/") --filein file:step3_inDQM.root"
 
-      if has_validate $WORKFLOW; then
-        echo "# prepare workflow $WORKFLOW"
-        $STEP3 $INPUT --no_exec --python_filename=step3.py
-        $STEP4        --no_exec --python_filename=step4.py
-        # show CUDAService messages and configure multithreading
-        cat >> step3.py << @EOF
+      echo "# prepare workflow $WORKFLOW"
+      $STEP3 $INPUT --no_exec --python_filename=step3.py
+      $STEP4        --no_exec --python_filename=step4.py
+      # show CUDAService messages and configure multithreading
+      cat >> step3.py << @EOF
 
 # Override the source to use the DAQ source
 import sys, os, inspect
@@ -224,7 +226,6 @@ process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32( 1 )
 if 'caHitNtupletCUDA' in process.__dict__:
   process.caHitNtupletCUDA.idealConditions = False
 @EOF
-      fi
 
       local PROFILING_FILE=$(get_profiling_file $WORKFLOW)
       local PROFILING_FUNC=$(get_profiling_function $WORKFLOW)
@@ -474,7 +475,7 @@ function make_validation_plots() {
           --outputDir $LOCAL_DIR/$JOBID/$WORKDIR/$REFERENCE_WORKFLOW \
           ${RELEASES[@]/%/-${REFERENCE_WORKFLOW}.root}
         report "  - tracking validation [plots]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/index.html) and [summary]($UPLOAD_URL/$JOBID/$WORKDIR/$WORKFLOW/plots_summary.html) for workflow $WORKFLOW"
-      elif has_validate $WORKFLOW; then
+      elif has_pixel_validation $WORKFLOW; then
         # other workflows
         local FILES=""
         local RELEASE

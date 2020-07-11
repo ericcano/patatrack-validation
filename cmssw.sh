@@ -20,21 +20,31 @@ STREAMS=8
 
 # runTheMatrix MC workflows (Run 3, 2021 relistic conditions)
 REFERENCE_WORKFLOW="11634.5"
-WORKFLOWS="11634.5 11634.501 11634.502 11634.511 11634.512"
+WORKFLOWS="11634.5 11634.501 11634.502 11634.511 11634.512 11634.521 11634.522"
 
 # runTheMatrix data Workflows (Run 2, 2018)
-DATA_WORKFLOWS="136.885502 136.885512"
+DATA_WORKFLOWS="136.885502 136.885512 136.885522"
 
-# Enable profiling and memcheck for selected workflows
-VALIDATE="11634.5 11634.501 11634.502 11634.511 11634.512"
+# Enable validation selected workflows
+PIXEL_VALIDATION="11634.5 11634.501 11634.502"
+ECAL_VALIDATION=""
+HCAL_VALIDATION=""
+VALIDATE="$PIXEL_VALIDATION $ECAL_VALIDATION $HCAL_VALIDATION"
+
+# Enable profiling for selected workflows
 PIXEL_PROFILING="11634.502 136.885502"
 PIXEL_PROFILING_FILE=RecoPixelVertexing/Configuration/customizePixelTracksForProfiling
 PIXEL_PROFILING_FUNC=customizePixelTracksForProfilingGPUOnly
 ECAL_PROFILING="11634.512 136.885512"
 ECAL_PROFILING_FILE=RecoLocalCalo/Configuration/customizeEcalOnlyForProfiling
 ECAL_PROFILING_FUNC=customizeEcalOnlyForProfilingGPUOnly
-PROFILING="$PIXEL_PROFILING $ECAL_PROFILING"
-MEMCHECKS="11634.502 11634.512"
+HCAL_PROFILING="11634.522 136.885522"
+HCAL_PROFILING_FILE=RecoLocalCalo/Configuration/customizeHcalOnlyForProfiling
+HCAL_PROFILING_FUNC=customizeHcalOnlyForProfilingGPUOnly
+PROFILING="$PIXEL_PROFILING $ECAL_PROFILING $HCAL_PROFILING"
+
+# Enable memcheck for selected workflows
+MEMCHECKS="11634.502 11634.512 11634.522"
 
 # Default number of events (overridden with sample-specific values in input.sh)
 NUMEVENTS=100
@@ -48,6 +58,7 @@ function get_profiling_file() {
   [ "$WORKFLOW" ] || return
   echo "$PIXEL_PROFILING" | grep -q -w "$WORKFLOW" && echo "$PIXEL_PROFILING_FILE"
   echo "$ECAL_PROFILING"  | grep -q -w "$WORKFLOW" && echo "$ECAL_PROFILING_FILE"
+  echo "$HCAL_PROFILING"  | grep -q -w "$WORKFLOW" && echo "$HCAL_PROFILING_FILE"
 }
 
 function get_profiling_function() {
@@ -55,6 +66,7 @@ function get_profiling_function() {
   [ "$WORKFLOW" ] || return
   echo "$PIXEL_PROFILING" | grep -q -w "$WORKFLOW" && echo "$PIXEL_PROFILING_FUNC"
   echo "$ECAL_PROFILING"  | grep -q -w "$WORKFLOW" && echo "$ECAL_PROFILING_FUNC"
+  echo "$HCAL_PROFILING"  | grep -q -w "$WORKFLOW" && echo "$HCAL_PROFILING_FUNC"
 }
 
 function setup_release() {
