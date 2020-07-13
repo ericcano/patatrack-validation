@@ -9,15 +9,15 @@ SAMPLES="TTBAR ZMUMU ZEE"
 DATA_SAMPLES="L1ACCEPT"
 
 # TTbar sample, with 2021 "realistic" conditions and pileup
-TTBAR="/RelValTTbar_14TeV/CMSSW_11_0_0_patch1-PU_110X_mcRun3_2021_realistic_v6-v1/GEN-SIM-DIGI-RAW"
+TTBAR="/RelValTTbar_14TeV/CMSSW_11_1_0_pre8-PU_111X_mcRun3_2021_realistic_v4-v1/GEN-SIM-DIGI-RAW"
 TTBAR_NUMEVENTS=100
 
 # Z -> mumu sample, with 2021 "realistic" conditions, no pileup
-ZMUMU="/RelValZMM_14/CMSSW_11_0_0_patch1-110X_mcRun3_2021_realistic_v6-v1/GEN-SIM-DIGI-RAW"
+ZMUMU="/RelValZMM_14/CMSSW_11_1_0_pre8-111X_mcRun3_2021_realistic_v4-v1/GEN-SIM-DIGI-RAW"
 ZMUMU_NUMEVENTS=200
 
 # Z -> ee sample, with 2021 "realistic" conditions, no pileup
-ZEE="/RelValZEE_14/CMSSW_11_0_0_patch1-110X_mcRun3_2021_realistic_v6-v1/GEN-SIM-DIGI-RAW"
+ZEE="/RelValZEE_14/CMSSW_11_1_0_pre8-111X_mcRun3_2021_realistic_v4-v1/GEN-SIM-DIGI-RAW"
 ZEE_NUMEVENTS=200
 
 # Level-1 Trigger selected events, from Run2018D data taking era, pileup 50
