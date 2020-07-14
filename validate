@@ -121,18 +121,18 @@ upload_report $ISSUE_NUMBER $COMMENT_ID
 exec 1>&3- 2>&4-
 upload_log_files $DIRECTORIES
 
-echo "This report can be found at $REPORT:"
-echo
-cat $REPORT
+#echo "This report can be found at $REPORT:"
+#echo
+#cat $REPORT
 
 # post the report to GitHub
 upload_final_report $ISSUE_NUMBER $COMMENT_ID
 
 # suggest to upload the plots and reports
-if ! hostname | grep -q '\.cern\.ch'; then
-  echo "Please upload the plots and reports with:"
-  echo "  rsync -arvzz $LOCAL_DIR/$JOBID lxplus.cern.ch:$UPLOAD_DIR/"
-fi
+#if ! hostname | grep -q '\.cern\.ch'; then
+#  echo "Please upload the plots and reports with:"
+#  echo "  rsync -arvzz $LOCAL_DIR/$JOBID lxplus.cern.ch:$UPLOAD_DIR/"
+#fi
 
 # mark the validation as complete
 touch "$LOCAL_DIR/$JOBID/done"
