@@ -1,6 +1,6 @@
 # Default global tag and number of events
 GLOBALTAG="111X_mcRun3_2021_realistic_v4"
-NUMEVENTS=100
+NUMEVENTS=200
 
 # Datasets used as input for the matrix-like tests
 SAMPLES="TTBAR ZMUMU ZEE"
@@ -22,5 +22,5 @@ ZEE_NUMEVENTS=200
 
 # Level-1 Trigger selected events, from Run2018D data taking era, pileup 50
 L1ACCEPT="/EphemeralHLTPhysics1/Run2018D-v1/RAW run=323775 lumi=53"
-L1ACCEPT_NUMEVENTS=4100
-L1ACCEPT_GLOBALTAG="auto:run2_data"
+L1ACCEPT_NUMEVENTS=200
+L1ACCEPT_GLOBALTAG="auto:run2_hlt_2018"
