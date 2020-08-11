@@ -6,13 +6,13 @@ export SCRAM_ARCH=slc7_amd64_gcc820
 source $VO_CMS_SW_DIR/cmsset_default.sh
 
 # Reference release
-REFERENCE_RELEASE=CMSSW_11_1_2
+REFERENCE_RELEASE=CMSSW_11_2_0_pre3
 
 # Development branch and latest release
 #DEVELOPMENT_BRANCH=master
-#DEVELOPMENT_RELEASE=CMSSW_11_1_2
-DEVELOPMENT_BRANCH=CMSSW_11_1_X_Patatrack
-DEVELOPMENT_RELEASE=CMSSW_11_1_2_Patatrack
+#DEVELOPMENT_RELEASE=CMSSW_11_2_0_pre3
+DEVELOPMENT_BRANCH=CMSSW_11_2_X_Patatrack
+DEVELOPMENT_RELEASE=CMSSW_11_2_0_pre3_Patatrack
 
 # Number of threads and streams used in each job
 THREADS=8
@@ -83,7 +83,7 @@ function setup_release() {
   echo
 
   # <add here any required pull request or external update>
-  git cms-merge-topic 30339
+  #git cms-merge-topic ...
 
   git rev-parse --short=12 HEAD > ../hash
   # check if there are any differences with respect to the base release
