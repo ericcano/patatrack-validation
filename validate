@@ -83,7 +83,7 @@ if [ "$PRS" ]; then
   # ... and their dependencies
   git cms-checkdeps -a
   # checkout all packages containing CUDA code, and rebuild all checked out packages with debug symbols
-  USER_CXXFLAGS="-g -rdynamic" USER_CUDA_FLAGS="-g -lineinfo" cmsCudaRebuild.sh
+  USER_CXXFLAGS="-g" USER_CUDA_FLAGS="-g -lineinfo" cmsCudaRebuild.sh
 
   build_matrix "testing" "$WORKFLOWS"
   build_data_matrix "testing" "$DATA_WORKFLOWS"
