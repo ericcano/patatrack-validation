@@ -105,3 +105,6 @@ visDQMUtils.py
 # validation working areas
 run.*/
 run_*/
+
+# Netbeans project settings
+nbproject/
